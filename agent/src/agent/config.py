@@ -66,6 +66,11 @@ class Config:
     # Overall wall-clock budget (seconds). Kept under the 10-min hard limit so
     # we always have time to write results.json before the container is killed.
     time_budget: int = 540
+    # Reasoning effort for models that support it (e.g. gpt-oss). Lower effort
+    # spends far fewer hidden "thinking" tokens — the main token-efficiency lever
+    # when the allowed models reason by default. Empty string disables the param.
+    # If a model rejects it, the client transparently retries without it.
+    reasoning_effort: str = "low"
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -82,4 +87,5 @@ class Config:
             max_concurrency=max(1, _env_int("MAX_CONCURRENCY", 8)),
             max_retries=max(0, _env_int("MAX_RETRIES", 2)),
             time_budget=max(30, _env_int("TIME_BUDGET", 540)),
+            reasoning_effort=os.environ.get("REASONING_EFFORT", "low").strip(),
         )

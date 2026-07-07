@@ -1,0 +1,1082 @@
+[
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "fact1",
+    "category": "factual",
+    "correct": true,
+    "tokens": 161,
+    "latency": 14.05,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "fact2",
+    "category": "factual",
+    "correct": true,
+    "tokens": 109,
+    "latency": 10.78,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "fact3",
+    "category": "factual",
+    "correct": true,
+    "tokens": 67,
+    "latency": 4.19,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "math1",
+    "category": "math",
+    "correct": true,
+    "tokens": 271,
+    "latency": 16.0,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "math2",
+    "category": "math",
+    "correct": true,
+    "tokens": 153,
+    "latency": 5.37,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "math3",
+    "category": "math",
+    "correct": true,
+    "tokens": 348,
+    "latency": 8.73,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "sent1",
+    "category": "sentiment",
+    "correct": true,
+    "tokens": 192,
+    "latency": 3.73,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "sent2",
+    "category": "sentiment",
+    "correct": true,
+    "tokens": 175,
+    "latency": 6.27,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "sent3",
+    "category": "sentiment",
+    "correct": false,
+    "tokens": 280,
+    "latency": 9.18,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "sum1",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 348,
+    "latency": 10.93,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "sum2",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 413,
+    "latency": 12.12,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "sum3",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 335,
+    "latency": 11.05,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "ner1",
+    "category": "ner",
+    "correct": true,
+    "tokens": 321,
+    "latency": 7.89,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "ner2",
+    "category": "ner",
+    "correct": true,
+    "tokens": 225,
+    "latency": 7.02,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "ner3",
+    "category": "ner",
+    "correct": true,
+    "tokens": 256,
+    "latency": 22.79,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "debug1",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 276,
+    "latency": 6.24,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "debug2",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 209,
+    "latency": 4.72,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "debug3",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 374,
+    "latency": 12.31,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "logic1",
+    "category": "logic",
+    "correct": true,
+    "tokens": 290,
+    "latency": 5.24,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "logic2",
+    "category": "logic",
+    "correct": true,
+    "tokens": 209,
+    "latency": 3.47,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "logic3",
+    "category": "logic",
+    "correct": true,
+    "tokens": 142,
+    "latency": 7.94,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "gen1",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 249,
+    "latency": 4.45,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "gen2",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 364,
+    "latency": 18.53,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/deepseek-v4-pro",
+    "task": "gen3",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 163,
+    "latency": 14.28,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "fact1",
+    "category": "factual",
+    "correct": true,
+    "tokens": 442,
+    "latency": 6.62,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "fact2",
+    "category": "factual",
+    "correct": true,
+    "tokens": 166,
+    "latency": 3.15,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "fact3",
+    "category": "factual",
+    "correct": true,
+    "tokens": 159,
+    "latency": 1.74,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "math1",
+    "category": "math",
+    "correct": true,
+    "tokens": 359,
+    "latency": 3.3,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "math2",
+    "category": "math",
+    "correct": true,
+    "tokens": 311,
+    "latency": 6.17,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "math3",
+    "category": "math",
+    "correct": true,
+    "tokens": 390,
+    "latency": 5.0,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "sent1",
+    "category": "sentiment",
+    "correct": true,
+    "tokens": 315,
+    "latency": 4.69,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "sent2",
+    "category": "sentiment",
+    "correct": false,
+    "tokens": 316,
+    "latency": 7.35,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "sent3",
+    "category": "sentiment",
+    "correct": false,
+    "tokens": 315,
+    "latency": 6.74,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "sum1",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 597,
+    "latency": 10.65,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "sum2",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 594,
+    "latency": 10.73,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "sum3",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 595,
+    "latency": 12.6,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "ner1",
+    "category": "ner",
+    "correct": true,
+    "tokens": 473,
+    "latency": 4.98,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "ner2",
+    "category": "ner",
+    "correct": true,
+    "tokens": 378,
+    "latency": 3.51,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "ner3",
+    "category": "ner",
+    "correct": true,
+    "tokens": 300,
+    "latency": 4.56,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "debug1",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 497,
+    "latency": 9.54,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "debug2",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 416,
+    "latency": 11.64,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "debug3",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 695,
+    "latency": 20.13,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "logic1",
+    "category": "logic",
+    "correct": true,
+    "tokens": 465,
+    "latency": 5.57,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "logic2",
+    "category": "logic",
+    "correct": true,
+    "tokens": 278,
+    "latency": 2.74,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "logic3",
+    "category": "logic",
+    "correct": true,
+    "tokens": 317,
+    "latency": 3.75,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "gen1",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 482,
+    "latency": 5.34,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "gen2",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 504,
+    "latency": 8.16,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p1",
+    "task": "gen3",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 625,
+    "latency": 9.01,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "fact1",
+    "category": "factual",
+    "correct": true,
+    "tokens": 349,
+    "latency": 2.96,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "fact2",
+    "category": "factual",
+    "correct": true,
+    "tokens": 193,
+    "latency": 10.22,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "fact3",
+    "category": "factual",
+    "correct": true,
+    "tokens": 123,
+    "latency": 3.75,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "math1",
+    "category": "math",
+    "correct": true,
+    "tokens": 258,
+    "latency": 18.18,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "math2",
+    "category": "math",
+    "correct": true,
+    "tokens": 297,
+    "latency": 6.91,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "math3",
+    "category": "math",
+    "correct": true,
+    "tokens": 343,
+    "latency": 7.46,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "sent1",
+    "category": "sentiment",
+    "correct": true,
+    "tokens": 322,
+    "latency": 6.57,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "sent2",
+    "category": "sentiment",
+    "correct": false,
+    "tokens": 323,
+    "latency": 10.48,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "sent3",
+    "category": "sentiment",
+    "correct": true,
+    "tokens": 322,
+    "latency": 9.32,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "sum1",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 127,
+    "latency": 1.81,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "sum2",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 149,
+    "latency": 5.0,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "sum3",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 136,
+    "latency": 4.05,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "ner1",
+    "category": "ner",
+    "correct": true,
+    "tokens": 378,
+    "latency": 4.67,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "ner2",
+    "category": "ner",
+    "correct": true,
+    "tokens": 317,
+    "latency": 7.74,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "ner3",
+    "category": "ner",
+    "correct": true,
+    "tokens": 320,
+    "latency": 3.56,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "debug1",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 373,
+    "latency": 11.78,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "debug2",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 152,
+    "latency": 3.27,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "debug3",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 183,
+    "latency": 8.28,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "logic1",
+    "category": "logic",
+    "correct": true,
+    "tokens": 301,
+    "latency": 5.74,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "logic2",
+    "category": "logic",
+    "correct": true,
+    "tokens": 301,
+    "latency": 7.22,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "logic3",
+    "category": "logic",
+    "correct": true,
+    "tokens": 260,
+    "latency": 11.73,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "gen1",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 252,
+    "latency": 3.19,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "gen2",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 379,
+    "latency": 4.25,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/glm-5p2",
+    "task": "gen3",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 207,
+    "latency": 1.47,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "fact1",
+    "category": "factual",
+    "correct": true,
+    "tokens": 179,
+    "latency": 0.54,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "fact2",
+    "category": "factual",
+    "correct": true,
+    "tokens": 133,
+    "latency": 0.33,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "fact3",
+    "category": "factual",
+    "correct": true,
+    "tokens": 116,
+    "latency": 0.34,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "math1",
+    "category": "math",
+    "correct": true,
+    "tokens": 250,
+    "latency": 0.77,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "math2",
+    "category": "math",
+    "correct": true,
+    "tokens": 170,
+    "latency": 0.62,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "math3",
+    "category": "math",
+    "correct": true,
+    "tokens": 320,
+    "latency": 1.0,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "sent1",
+    "category": "sentiment",
+    "correct": true,
+    "tokens": 142,
+    "latency": 0.86,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "sent2",
+    "category": "sentiment",
+    "correct": true,
+    "tokens": 149,
+    "latency": 0.96,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "sent3",
+    "category": "sentiment",
+    "correct": true,
+    "tokens": 178,
+    "latency": 0.84,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "sum1",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 177,
+    "latency": 0.79,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "sum2",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 185,
+    "latency": 0.76,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "sum3",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 174,
+    "latency": 0.47,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "ner1",
+    "category": "ner",
+    "correct": true,
+    "tokens": 228,
+    "latency": 1.23,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "ner2",
+    "category": "ner",
+    "correct": true,
+    "tokens": 186,
+    "latency": 1.05,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "ner3",
+    "category": "ner",
+    "correct": true,
+    "tokens": 178,
+    "latency": 1.07,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "debug1",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 301,
+    "latency": 1.58,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "debug2",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 273,
+    "latency": 1.45,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "debug3",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 359,
+    "latency": 1.36,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "logic1",
+    "category": "logic",
+    "correct": true,
+    "tokens": 182,
+    "latency": 0.68,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "logic2",
+    "category": "logic",
+    "correct": true,
+    "tokens": 189,
+    "latency": 0.69,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "logic3",
+    "category": "logic",
+    "correct": true,
+    "tokens": 184,
+    "latency": 0.74,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "gen1",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 284,
+    "latency": 1.02,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "gen2",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 419,
+    "latency": 1.25,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "task": "gen3",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 254,
+    "latency": 1.54,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "fact1",
+    "category": "factual",
+    "correct": true,
+    "tokens": 311,
+    "latency": 3.8,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "fact2",
+    "category": "factual",
+    "correct": true,
+    "tokens": 120,
+    "latency": 1.45,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "fact3",
+    "category": "factual",
+    "correct": true,
+    "tokens": 104,
+    "latency": 1.14,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "math1",
+    "category": "math",
+    "correct": true,
+    "tokens": 388,
+    "latency": 3.28,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "math2",
+    "category": "math",
+    "correct": true,
+    "tokens": 237,
+    "latency": 13.4,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "math3",
+    "category": "math",
+    "correct": true,
+    "tokens": 527,
+    "latency": 5.92,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "sent1",
+    "category": "sentiment",
+    "correct": true,
+    "tokens": 321,
+    "latency": 19.41,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "sent2",
+    "category": "sentiment",
+    "correct": true,
+    "tokens": 241,
+    "latency": 3.25,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "sent3",
+    "category": "sentiment",
+    "correct": false,
+    "tokens": 321,
+    "latency": 3.73,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "sum1",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 541,
+    "latency": 14.58,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "sum2",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 589,
+    "latency": 5.92,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "sum3",
+    "category": "summarization",
+    "correct": true,
+    "tokens": 259,
+    "latency": 2.56,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "ner1",
+    "category": "ner",
+    "correct": true,
+    "tokens": 595,
+    "latency": 7.47,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "ner2",
+    "category": "ner",
+    "correct": true,
+    "tokens": 244,
+    "latency": 2.14,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "ner3",
+    "category": "ner",
+    "correct": true,
+    "tokens": 328,
+    "latency": 13.0,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "debug1",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 451,
+    "latency": 3.75,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "debug2",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 277,
+    "latency": 3.29,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "debug3",
+    "category": "code_debug",
+    "correct": true,
+    "tokens": 685,
+    "latency": 14.63,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "logic1",
+    "category": "logic",
+    "correct": true,
+    "tokens": 314,
+    "latency": 3.07,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "logic2",
+    "category": "logic",
+    "correct": true,
+    "tokens": 369,
+    "latency": 3.82,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "logic3",
+    "category": "logic",
+    "correct": true,
+    "tokens": 512,
+    "latency": 9.67,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "gen1",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 784,
+    "latency": 8.09,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "gen2",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 807,
+    "latency": 7.58,
+    "error": ""
+  },
+  {
+    "model": "accounts/fireworks/models/kimi-k2p6",
+    "task": "gen3",
+    "category": "code_gen",
+    "correct": true,
+    "tokens": 283,
+    "latency": 4.75,
+    "error": ""
+  }
+]

@@ -113,7 +113,19 @@ echo "exit code: $?"          # must be 0
 
 ## Launch-day tuning
 
-The only file that typically needs touching once you see real accuracy is
-`src/agent/categories.py`: widen a category's `max_tokens` or bump its tier from
-`SMALL` to `LARGE` if it misses the accuracy gate. Model IDs never need editing —
-they flow entirely from `ALLOWED_MODELS`.
+Model IDs never need editing — they flow entirely from `ALLOWED_MODELS`. Two
+knobs matter, in order of impact:
+
+1. **`reasoning_effort`** (config default `low`, env `REASONING_EFFORT`) — the
+   biggest token lever. 2026 Fireworks models reason by default; low effort cut
+   completion tokens ~27% in testing and prevents the "all budget spent on
+   hidden thinking, empty answer" failure. The client auto-drops the param for
+   any model that doesn't accept it. Raise to `medium` only if math/logic
+   accuracy suffers.
+2. **`src/agent/categories.py`** — widen a category's `max_tokens` or bump its
+   tier `SMALL`→`LARGE` if it misses the accuracy gate. Caps are ceilings, not
+   targets; keep them generous so an answer is never truncated to empty.
+
+Always run `scripts/run_local.py` on launch day and eyeball the answers — watch
+for models that print their reasoning *into* the answer (verbose, token-heavy)
+versus those that return only the final answer (preferred).

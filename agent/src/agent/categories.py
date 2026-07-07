@@ -40,15 +40,21 @@ class CategoryPolicy:
 # need multi-step correctness (math, logic, code) go to the capable model with
 # more room. Temperature is 0 everywhere: these are objective tasks and
 # determinism helps both accuracy and reproducibility.
+# NOTE on caps: max_tokens is a *ceiling*, not a target — a concise model stops
+# early and only spends what it needs. But reasoning-capable models spend hidden
+# "thinking" tokens before the visible answer, so a cap that is too tight can
+# truncate the answer to empty (observed with a 48-token sentiment cap). We keep
+# generous floors so an answer always survives; `reasoning_effort=low` (see
+# config/client) is what actually keeps token spend down.
 POLICIES: dict[Category, CategoryPolicy] = {
-    Category.SENTIMENT: CategoryPolicy(Tier.SMALL, max_tokens=48),
-    Category.NER: CategoryPolicy(Tier.SMALL, max_tokens=256),
-    Category.FACTUAL: CategoryPolicy(Tier.SMALL, max_tokens=300),
-    Category.SUMMARIZATION: CategoryPolicy(Tier.SMALL, max_tokens=256),
-    Category.MATH: CategoryPolicy(Tier.LARGE, max_tokens=512),
-    Category.LOGIC: CategoryPolicy(Tier.LARGE, max_tokens=512),
-    Category.CODE_DEBUG: CategoryPolicy(Tier.LARGE, max_tokens=640),
-    Category.CODE_GEN: CategoryPolicy(Tier.LARGE, max_tokens=640),
+    Category.SENTIMENT: CategoryPolicy(Tier.SMALL, max_tokens=256),
+    Category.NER: CategoryPolicy(Tier.SMALL, max_tokens=512),
+    Category.FACTUAL: CategoryPolicy(Tier.SMALL, max_tokens=512),
+    Category.SUMMARIZATION: CategoryPolicy(Tier.SMALL, max_tokens=512),
+    Category.MATH: CategoryPolicy(Tier.LARGE, max_tokens=1024),
+    Category.LOGIC: CategoryPolicy(Tier.LARGE, max_tokens=1024),
+    Category.CODE_DEBUG: CategoryPolicy(Tier.LARGE, max_tokens=1024),
+    Category.CODE_GEN: CategoryPolicy(Tier.LARGE, max_tokens=1024),
 }
 
 # Fallback used if a category is somehow missing from POLICIES.

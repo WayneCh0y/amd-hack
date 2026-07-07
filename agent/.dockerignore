@@ -6,6 +6,8 @@
 examples/
 tests/
 scripts/
+benchmark/
+benchmark_results.json
 results.local.json
 README.md
 **/__pycache__/

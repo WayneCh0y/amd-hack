@@ -64,6 +64,9 @@ class FireworksClient:
             max_retries=0,  # we manage retries ourselves for backoff control
         )
         self.meter = TokenMeter()
+        # Models that rejected `reasoning_effort`; we stop sending it to them.
+        self._no_reasoning_param: set[str] = set()
+        self._no_reasoning_lock = threading.Lock()
 
     def complete(
         self,
@@ -74,7 +77,47 @@ class FireworksClient:
         max_tokens: int,
         temperature: float = 0.0,
     ) -> str:
-        """Run one chat completion and return the assistant text.
+        """Run one chat completion and return the assistant text."""
+        text, _ = self._run(
+            model=model,
+            system=system,
+            user=user,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        return text
+
+    def complete_with_usage(
+        self,
+        *,
+        model: str,
+        system: str,
+        user: str,
+        max_tokens: int,
+        temperature: float = 0.0,
+    ) -> tuple[str, Usage]:
+        """Like :meth:`complete` but also returns this call's token usage.
+
+        Used by the benchmark harness to measure per-call cost per model.
+        """
+        return self._run(
+            model=model,
+            system=system,
+            user=user,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+    def _run(
+        self,
+        *,
+        model: str,
+        system: str,
+        user: str,
+        max_tokens: int,
+        temperature: float,
+    ) -> tuple[str, Usage]:
+        """Single completion with retries; returns (text, usage).
 
         Raises the last exception if all attempts fail; callers decide how to
         fall back. Token usage from successful calls is always metered.
@@ -92,11 +135,17 @@ class FireworksClient:
                     ],
                     max_tokens=max_tokens,
                     temperature=temperature,
+                    **self._reasoning_kwargs(model),
                 )
-                self._record_usage(response)
+                usage = self._usage_of(response)
+                self.meter.add(usage)
                 content = response.choices[0].message.content
-                return (content or "").strip()
+                return (content or "").strip(), usage
             except Exception as exc:  # noqa: BLE001 - retry on any transient error
+                # If the model rejected `reasoning_effort`, drop it and retry
+                # immediately (doesn't consume a backoff attempt).
+                if self._maybe_disable_reasoning(model, exc):
+                    continue
                 last_exc = exc
                 if attempt < attempts - 1:
                     # Exponential backoff: 0.5s, 1s, 2s, ... capped at 4s.
@@ -105,14 +154,36 @@ class FireworksClient:
         assert last_exc is not None
         raise last_exc
 
-    def _record_usage(self, response) -> None:
+    def _reasoning_kwargs(self, model: str) -> dict:
+        effort = self._config.reasoning_effort
+        if not effort:
+            return {}
+        with self._no_reasoning_lock:
+            if model in self._no_reasoning_param:
+                return {}
+        return {"reasoning_effort": effort}
+
+    def _maybe_disable_reasoning(self, model: str, exc: Exception) -> bool:
+        """Return True if ``exc`` is an unsupported-``reasoning_effort`` error.
+
+        Records the model so future calls omit the param, and signals the caller
+        to retry without counting it as a backoff attempt.
+        """
+        if "reasoning_effort" not in str(exc):
+            return False
+        with self._no_reasoning_lock:
+            if model in self._no_reasoning_param:
+                return False  # already dropped; a different error, don't loop
+            self._no_reasoning_param.add(model)
+        return True
+
+    @staticmethod
+    def _usage_of(response) -> Usage:
         usage = getattr(response, "usage", None)
         if usage is None:
-            return
-        self.meter.add(
-            Usage(
-                prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
-                completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
-                total_tokens=getattr(usage, "total_tokens", 0) or 0,
-            )
+            return Usage()
+        return Usage(
+            prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            total_tokens=getattr(usage, "total_tokens", 0) or 0,
         )
