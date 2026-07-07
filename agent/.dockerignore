@@ -1,0 +1,16 @@
+# Keep the image small and free of dev-only / secret material.
+.git
+.gitignore
+.env
+*.env
+examples/
+tests/
+scripts/
+results.local.json
+README.md
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/

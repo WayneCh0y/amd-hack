@@ -1,0 +1,34 @@
+[
+  {
+    "task_id": "t1",
+    "prompt": "What is Newton's First Law of Motion?"
+  },
+  {
+    "task_id": "t2",
+    "prompt": "A shirt costs $40 and is discounted by 25%. It is then subject to an 8% sales tax on the discounted price. What is the final price?"
+  },
+  {
+    "task_id": "t3",
+    "prompt": "Classify the sentiment of this review: 'The battery life is fantastic and it charges quickly, but the screen scratches far too easily.'"
+  },
+  {
+    "task_id": "t4",
+    "prompt": "Summarise the following text in one sentence: Photosynthesis is the process by which green plants, algae and some bacteria convert light energy, usually from the sun, into chemical energy stored in glucose, releasing oxygen as a by-product."
+  },
+  {
+    "task_id": "t5",
+    "prompt": "Extract the named entities (person, organisation, location, date) from: 'On 12 March 2023, Satya Nadella announced in Seattle that Microsoft would partner with OpenAI.'"
+  },
+  {
+    "task_id": "t6",
+    "prompt": "This Python function should return the factorial of n but has a bug. Fix it:\n```python\ndef factorial(n):\n    result = 0\n    for i in range(1, n + 1):\n        result *= i\n    return result\n```"
+  },
+  {
+    "task_id": "t7",
+    "prompt": "Three friends — Ana, Ben and Cara — each own a different pet: a cat, a dog and a fish. Ana does not own the dog. Ben owns the fish. Who owns the cat?"
+  },
+  {
+    "task_id": "t8",
+    "prompt": "Write a Python function `is_palindrome(s: str) -> bool` that returns True if the string is a palindrome, ignoring case, spaces and punctuation."
+  }
+]
