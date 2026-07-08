@@ -35,15 +35,12 @@ SYSTEM_PROMPTS: dict[Category, str] = {
         f"no commentary or preamble. {_COMMON}"
     ),
     Category.NER: (
-        "You extract named entities. List each entity with its type "
-        "(PERSON, ORG, LOCATION, DATE, or other as appropriate), one per line "
-        "as 'Type: entity'. Include only entities present in the text; no "
-        f"commentary. {_COMMON}"
+        "Extract named entities as 'TYPE: entity', one per line "
+        f"(PERSON, ORG, LOCATION, DATE, or similar). Only entities in the text. {_COMMON}"
     ),
     Category.CODE_DEBUG: (
-        "You are an expert debugger. Identify the bug briefly, then give the "
-        "corrected code in a single code block. Keep prose minimal. "
-        f"{_COMMON}"
+        "Identify the bug in one line, then give the corrected code in a "
+        f"single code block. {_COMMON}"
     ),
     Category.CODE_GEN: (
         "You are an expert programmer. Return only the requested code in a "

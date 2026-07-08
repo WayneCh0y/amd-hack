@@ -58,6 +58,33 @@ _MATH_KEYWORD_RE = re.compile(
 )
 _MATH_EXPR_RE = re.compile(r"\d\s*[-+*/^×÷%]\s*\d|\d+\s*%|\$\d")
 
+# Word-problem shapes with no arithmetic symbol and no math keyword: age
+# puzzles, "in N years", "combined age", "twice as old". These currently fall
+# through to FACTUAL and get the small tier, which is likely to miss.
+_MATH_WORDPROBLEM_RE = re.compile(
+    r"\b(twice as old|combined ages?|in \d+ years?|"
+    r"(their|his|her) (age|combined))\b"
+)
+
+# Words that carry a numeric value in plainly-worded prompts (e.g. "Tom is
+# twice as old as Jerry. In five years, their combined age will be forty").
+_SPELLED_NUMBER_RE = re.compile(
+    r"\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|"
+    r"twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|"
+    r"nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|"
+    r"hundred|thousand|million|billion|twice|thrice|half|double|triple|"
+    r"quarter)\b"
+)
+_DIGIT_RUN_RE = re.compile(r"\b\d+(?:\.\d+)?\b")
+# "How old / how many / how much / what is / what will / find / determine …?"
+# — questions that, combined with 2+ numeric tokens, are almost always math.
+_QUANTITY_QUESTION_RE = re.compile(
+    r"\b(how (old|many|much|long|far|fast|tall|heavy|old is)|"
+    r"what (is|are|was|were|will) (the )?(final|total|result|answer|"
+    r"value|price|cost|amount|number|sum|difference|product)|"
+    r"\bfind\b|\bdetermine\b)"
+)
+
 _LOGIC_RE = re.compile(
     r"\b(puzzle|riddle|deduce|deduction|logically|if and only if|"
     r"seating|arrange|ordering|rank(ing)? them|who (is|sits|owns|likes)|"
@@ -91,13 +118,28 @@ def classify(prompt: str) -> Category:
     if _NER_RE.search(text):
         return Category.NER
 
-    # 3) Math: keyword or a bare arithmetic expression.
-    if _MATH_KEYWORD_RE.search(text) or _MATH_EXPR_RE.search(text):
+    # 3) Math: keyword, a bare arithmetic expression, or a recognisable
+    #    word-problem shape (age puzzles, "in N years, combined age...").
+    if (
+        _MATH_KEYWORD_RE.search(text)
+        or _MATH_EXPR_RE.search(text)
+        or _MATH_WORDPROBLEM_RE.search(text)
+    ):
         return Category.MATH
 
     # 4) Constraint / deductive puzzles.
     if _LOGIC_RE.search(text):
         return Category.LOGIC
 
-    # 5) Default: factual / general knowledge Q&A.
+    # 5) Plainly-worded math fallback: 2+ numeric tokens (digits or spelled)
+    #    AND a quantity-style question. Catches word problems that have no
+    #    math keyword and no arithmetic symbol.
+    numeric_hits = (
+        len(_DIGIT_RUN_RE.findall(text))
+        + len(_SPELLED_NUMBER_RE.findall(text))
+    )
+    if numeric_hits >= 2 and _QUANTITY_QUESTION_RE.search(text):
+        return Category.MATH
+
+    # 6) Default: factual / general knowledge Q&A.
     return Category.FACTUAL

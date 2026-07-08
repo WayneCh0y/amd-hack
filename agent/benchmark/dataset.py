@@ -159,4 +159,131 @@ TASKS: list[BenchTask] = [
               {"type": "code",
                "tests": "assert count_vowels('Hello World') == 3\n"
                         "assert count_vowels('xyz') == 0\nassert count_vowels('AEIOU') == 5"}),
+
+    # === Adversarial extensions ==========================================
+    # Two extra tasks per category. Chosen to stress the router (plainly-
+    # worded prompts that don't hit obvious keywords) and the prompts
+    # (length constraints, empty-input edge cases, sarcasm), so a passing
+    # score reflects real capability rather than lucky routing.
+
+    # --- Factual knowledge (adversarial) ----------------------------------
+    BenchTask("fact4", Category.FACTUAL,
+              "Which planet in our solar system has the most moons?",
+              {"type": "keywords", "any": [["saturn"]]}),
+    BenchTask("fact5", Category.FACTUAL,
+              "In one word, what gas do plants absorb from the atmosphere for "
+              "photosynthesis?",
+              {"type": "keywords",
+               "any": [["carbon dioxide", "co2", "co₂"]]}),
+
+    # --- Mathematical reasoning (adversarial) -----------------------------
+    # Plainly-worded age puzzle in the shape math3 uses — a router regression
+    # here means word-problem detection has broken.
+    BenchTask("math4", Category.MATH,
+              "Alice is 3 times as old as Bob. In 4 years, Alice will be twice "
+              "as old as Bob will be then. How old is Bob now?",
+              {"type": "numeric", "value": 8, "tol": 0.01}),
+    BenchTask("math5", Category.MATH,
+              "An item was $80. It is discounted by 20%, then by another 10% "
+              "on the reduced price. What is the final price?",
+              {"type": "numeric", "value": 57.6, "tol": 0.02}),
+
+    # --- Sentiment classification (adversarial) ---------------------------
+    BenchTask("sent4", Category.SENTIMENT,
+              "Classify the sentiment: 'Oh great, another two-hour delay. "
+              "Absolutely wonderful — just what I needed today.'",
+              {"type": "label", "expected": ["negative"]}),
+    BenchTask("sent5", Category.SENTIMENT,
+              "Classify the sentiment: 'The service was polite, but the food "
+              "arrived cold and the bill was wrong.'",
+              {"type": "label", "expected": ["negative", "mixed", "neutral"]}),
+
+    # --- Text summarisation (adversarial) ---------------------------------
+    # Long input — pressures the prompt's "obey length constraints" rule.
+    BenchTask("sum4", Category.SUMMARIZATION,
+              "Summarise in one sentence: The Industrial Revolution, which "
+              "began in Britain in the late 18th century and spread across "
+              "Europe and North America, transformed largely agrarian, rural "
+              "societies into industrial and urban ones. Innovations such as "
+              "the steam engine, mechanised textile production and iron "
+              "smelting drove unprecedented economic growth, urbanisation and "
+              "population expansion, while also introducing new social "
+              "challenges including poor working conditions, child labour and "
+              "environmental degradation that would take generations to "
+              "address through labour laws and regulation.",
+              {"type": "keywords",
+               "any": [["industrial"], ["britain", "europe", "north america"],
+                       ["steam", "textile", "iron", "mechani"]]}),
+    # Strict length constraint — tests that the model obeys the request.
+    BenchTask("sum5", Category.SUMMARIZATION,
+              "Summarise in no more than 12 words: A total solar eclipse "
+              "occurs when the Moon passes between the Sun and Earth, blocking "
+              "the Sun's light and casting a shadow on the Earth's surface.",
+              {"type": "keywords",
+               "any": [["moon"], ["sun"], ["eclipse", "block", "shadow"]]}),
+
+    # --- Named entity recognition (adversarial) ---------------------------
+    # No "entity"/"NER" keyword; a router regression sends this to FACTUAL.
+    BenchTask("ner4", Category.NER,
+              "Who and where is mentioned here: 'Angela Merkel met Emmanuel "
+              "Macron at the Elysee Palace in Paris last spring.'",
+              {"type": "entities",
+               "expected": ["Angela Merkel", "Emmanuel Macron", "Paris"]}),
+    BenchTask("ner5", Category.NER,
+              "Extract the named entities: 'NASA launched the James Webb "
+              "Space Telescope on 25 December 2021 from French Guiana.'",
+              {"type": "entities",
+               "expected": ["NASA", "James Webb", "2021", "French Guiana"]}),
+
+    # --- Code debugging (adversarial) -------------------------------------
+    # Off-by-one bug.
+    BenchTask("debug4", Category.CODE_DEBUG,
+              "This function should return the count of even numbers in a "
+              "list but is off by one. Fix it:\n```python\ndef count_evens(xs):\n"
+              "    n = 0\n    for i in range(len(xs) - 1):\n        if xs[i] % 2 == 0:\n"
+              "            n += 1\n    return n\n```",
+              {"type": "code",
+               "tests": "assert count_evens([1,2,3,4]) == 2\n"
+                        "assert count_evens([2]) == 1\nassert count_evens([]) == 0"}),
+    # Wrong return type / early return bug.
+    BenchTask("debug5", Category.CODE_DEBUG,
+              "This function should return True if any element is negative "
+              "but always returns False. Fix it:\n```python\ndef has_negative(xs):\n"
+              "    for x in xs:\n        if x < 0:\n            return False\n"
+              "    return False\n```",
+              {"type": "code",
+               "tests": "assert has_negative([1,-2,3])\n"
+                        "assert not has_negative([1,2,3])\nassert not has_negative([])"}),
+
+    # --- Logical / deductive reasoning (adversarial) ----------------------
+    # No "who owns/sits/likes" — the current _LOGIC_RE partly relies on it.
+    BenchTask("logic4", Category.LOGIC,
+              "There are five houses in a row. The red house is immediately "
+              "to the left of the green house. The blue house is at position "
+              "1. If the green house is at position 3, what colour is the "
+              "house at position 2?",
+              {"type": "keywords", "any": [["red"]]}),
+    # Syllogism without "necessarily" phrasing.
+    BenchTask("logic5", Category.LOGIC,
+              "No mammals are cold-blooded. All whales are mammals. Are any "
+              "whales cold-blooded? Answer yes or no.",
+              {"type": "keywords", "any": [["no"]]}),
+
+    # --- Code generation (adversarial) ------------------------------------
+    # Signature with default arg + empty-input edge case.
+    BenchTask("gen4", Category.CODE_GEN,
+              "Write a Python function `clamp(x: float, lo: float = 0.0, "
+              "hi: float = 1.0) -> float` that returns x clamped to the "
+              "closed interval [lo, hi].",
+              {"type": "code",
+               "tests": "assert clamp(0.5) == 0.5\nassert clamp(-1) == 0.0\n"
+                        "assert clamp(2) == 1.0\nassert clamp(5, 0, 10) == 5"}),
+    # Empty-input handling.
+    BenchTask("gen5", Category.CODE_GEN,
+              "Write a Python function `average(xs: list[float]) -> float` "
+              "that returns the arithmetic mean of the list, or 0.0 for an "
+              "empty list.",
+              {"type": "code",
+               "tests": "assert average([1,2,3]) == 2\nassert average([]) == 0.0\n"
+                        "assert average([10]) == 10"}),
 ]
