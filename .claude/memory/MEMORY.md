@@ -6,3 +6,4 @@
 - [Track 1 Launch-Day Tuning](track1-launch-day-tuning.md) — real-Fireworks lessons: reasoning_effort is the main token lever, watch for empty answers & in-content reasoning
 - [Track 1 Benchmark Harness](track1-benchmark-harness.md) — scripts/benchmark.py measures accuracy×tokens per model per category; run it on real ALLOWED_MODELS on launch day
 - [Track 1 Local Model Results](track1-local-model-results.md) — Qwen2.5-3B-Instruct Q4 scores 36/40 (90%) on CPU via llama-cpp-python; nearly clears the gate at zero tokens; Docker/AVX2 build setup + gotchas
+- [Presentation Manim Setup](presentation-manim-setup.md) — video deck in presentation/slides.py (manim + manim-slides); render commands, global-Python-not-agent-venv, PyAV-encodes-not-ffmpeg, teardown gotchas

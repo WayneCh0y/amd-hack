@@ -1,0 +1,8 @@
+# This file is used internally by FFMPEG.
+file 'file:C:/Me/Projects/amd-hack/presentation/media/videos/slides/1080p60/partial_movie_files/Title/3729587647_1056127598_498948482.mp4'
+file 'file:C:/Me/Projects/amd-hack/presentation/media/videos/slides/1080p60/partial_movie_files/Title/4160403680_1559949814_2195200041.mp4'
+file 'file:C:/Me/Projects/amd-hack/presentation/media/videos/slides/1080p60/partial_movie_files/Title/4160403680_1703144516_1739074266.mp4'
+file 'file:C:/Me/Projects/amd-hack/presentation/media/videos/slides/1080p60/partial_movie_files/Title/4160403680_3705047123_914251805.mp4'
+file 'file:C:/Me/Projects/amd-hack/presentation/media/videos/slides/1080p60/partial_movie_files/Title/4160403680_1283503404_3249472904.mp4'
+file 'file:C:/Me/Projects/amd-hack/presentation/media/videos/slides/1080p60/partial_movie_files/Title/4160403680_3345251025_2688601681.mp4'
+file 'file:C:/Me/Projects/amd-hack/presentation/media/videos/slides/1080p60/partial_movie_files/Title/4160403680_807188262_3480084357.mp4'
