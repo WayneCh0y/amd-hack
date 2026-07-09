@@ -57,6 +57,25 @@ class FakeClient:
         return item
 
 
+class FakeLocal:
+    """Stub local model with the same ``complete`` kwargs Pipeline uses.
+
+    Returns a scripted answer (or raises a queued Exception). Records calls so
+    tests can assert the local path was exercised.
+    """
+
+    def __init__(self, answer):
+        self._answer = answer
+        self.calls: list[str] = []
+
+    def complete(self, *, system: str, user: str, max_tokens: int,
+                 temperature: float = 0.0) -> str:
+        self.calls.append(user)
+        if isinstance(self._answer, Exception):
+            raise self._answer
+        return self._answer
+
+
 def _config(**overrides) -> Config:
     """Minimal Config for tests; overrides win over these defaults."""
     kwargs = dict(
@@ -71,10 +90,10 @@ def _config(**overrides) -> Config:
     return Config(**kwargs)
 
 
-def _pipeline(client: FakeClient, **config_overrides) -> Pipeline:
+def _pipeline(client: FakeClient, local=None, **config_overrides) -> Pipeline:
     config = _config(**config_overrides)
     selector = ModelSelector(config.allowed_models)
-    return Pipeline(config, client, selector)
+    return Pipeline(config, client, selector, local=local)
 
 
 def test_primary_tier_fails_alt_succeeds():
@@ -184,6 +203,45 @@ def test_results_preserve_input_order_with_concurrency():
     results = pipeline.run(tasks)
 
     assert [r["task_id"] for r in results] == ["t1", "t2", "t3"]
+
+
+def test_trusted_local_answer_skips_fireworks():
+    # A well-formed local answer that passes verification is used as-is; the
+    # Fireworks client must never be called (zero tokens).
+    client = FakeClient({SMALL_MODEL: ["should not be used"]})
+    local = FakeLocal("Answer: 42")
+    pipeline = _pipeline(client, local=local)
+
+    results = pipeline.run([Task(task_id="m", prompt="What is 6 times 7?")])
+
+    assert results == [{"task_id": "m", "answer": "Answer: 42"}]
+    assert local.calls == ["What is 6 times 7?"]
+    assert client.calls == []  # no escalation
+
+
+def test_untrustworthy_local_answer_escalates():
+    # A math answer with no number fails verification → escalate to Fireworks.
+    # "Calculate ..." routes to MATH, whose verifier requires a number.
+    client = FakeClient({SMALL_MODEL: ["36"], LARGE_MODEL: ["36"]})
+    local = FakeLocal("I think it is quite large.")
+    pipeline = _pipeline(client, local=local)
+
+    results = pipeline.run([Task(task_id="m", prompt="Calculate 15% of 240.")])
+
+    assert results == [{"task_id": "m", "answer": "36"}]
+    assert len(local.calls) == 1
+    assert len(client.calls) >= 1  # escalated
+
+
+def test_local_exception_escalates():
+    client = FakeClient({SMALL_MODEL: ["fallback answer"]})
+    local = FakeLocal(RuntimeError("model blew up"))
+    pipeline = _pipeline(client, local=local)
+
+    results = pipeline.run([Task(task_id="q", prompt="Capital of France?")])
+
+    assert results == [{"task_id": "q", "answer": "fallback answer"}]
+    assert len(client.calls) >= 1
 
 
 @pytest.mark.parametrize("raw,expected_id,expected_prompt", [

@@ -17,12 +17,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
-from .categories import Tier, policy_for
+from .categories import Category, Tier, policy_for
 from .config import Config
 from .fireworks_client import FireworksClient
+from .local_model import LocalModel
 from .model_selector import ModelSelector
 from .prompts import system_prompt_for
 from .router import classify
+from .verifiers import is_trustworthy
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +59,14 @@ class Pipeline:
         config: Config,
         client: FireworksClient,
         selector: ModelSelector,
+        local: LocalModel | None = None,
     ):
         self._config = config
         self._client = client
         self._selector = selector
+        # When present, tasks are answered locally first (zero Fireworks tokens)
+        # and only escalated to the API when the local answer fails verification.
+        self._local = local
 
     def _model_for(self, tier: Tier) -> str:
         return self._selector.small() if tier is Tier.SMALL else self._selector.large()
@@ -76,6 +82,40 @@ class Pipeline:
         policy = policy_for(category)
         system = system_prompt_for(category)
 
+        # 1) Local-first: answer with the bundled model at zero Fireworks cost.
+        #    Keep it only if it passes verification; otherwise fall through to
+        #    the API. This is where the token savings come from.
+        if self._local is not None:
+            local_answer = self._try_local(task, category, system, policy)
+            if local_answer is not None:
+                return local_answer
+
+        # 2) Escalate to Fireworks.
+        return self._answer_via_fireworks(task, system, policy)
+
+    def _try_local(self, task: Task, category: Category, system: str, policy) -> str | None:
+        """Return a trusted local answer, or None to signal escalation."""
+        try:
+            answer = self._local.complete(
+                system=system,
+                user=task.prompt,
+                max_tokens=policy.max_tokens,
+                temperature=policy.temperature,
+            )
+        except Exception as exc:  # noqa: BLE001 - any local failure escalates
+            logger.warning("Local model failed on task %s: %s; escalating", task.task_id, exc)
+            return None
+
+        if answer and is_trustworthy(category, task.prompt, answer):
+            return answer
+        logger.info(
+            "Local answer for task %s (%s) failed verification; escalating",
+            task.task_id,
+            category.value,
+        )
+        return None
+
+    def _answer_via_fireworks(self, task: Task, system: str, policy) -> str:
         primary_tier = policy.tier
         alt_tier = Tier.LARGE if primary_tier is Tier.SMALL else Tier.SMALL
 

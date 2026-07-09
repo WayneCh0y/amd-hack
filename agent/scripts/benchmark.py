@@ -50,12 +50,100 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--reasoning", help="override REASONING_EFFORT (e.g. low/medium/high/'')")
     p.add_argument("--concurrency", type=int, default=8)
     p.add_argument("--out", default=str(ROOT / "benchmark_results.json"))
+    p.add_argument(
+        "--local",
+        nargs="?",
+        const="__auto__",
+        default=None,
+        help="benchmark the bundled local model (zero Fireworks tokens) instead "
+        "of the API. Optional path to the .gguf; defaults to $LOCAL_MODEL_PATH "
+        "or the single .gguf under models/.",
+    )
     return p.parse_args()
+
+
+def _resolve_local_path(arg: str) -> str | None:
+    if arg and arg != "__auto__":
+        return arg
+    if os.environ.get("LOCAL_MODEL_PATH"):
+        return os.environ["LOCAL_MODEL_PATH"]
+    ggufs = sorted((ROOT / "models").glob("*.gguf"))
+    return str(ggufs[0]) if ggufs else None
+
+
+def _run_local(args: argparse.Namespace) -> int:
+    """Benchmark the bundled local model: accuracy + latency + local tokens
+    per category. Local tokens do NOT count toward the competition score — the
+    point is the per-category pass/fail map that decides what stays off Fireworks.
+    """
+    from agent.categories import policy_for
+    from agent.local_model import LocalModel
+    from agent.prompts import system_prompt_for
+    from benchmark.checkers import verify
+    from benchmark.dataset import TASKS
+
+    path = _resolve_local_path(args.local)
+    if not path or not os.path.isfile(path):
+        print(f"Local model not found (path={path!r}). Download a GGUF into "
+              "models/ or set LOCAL_MODEL_PATH.", file=sys.stderr)
+        return 1
+
+    tasks = _filter_tasks(TASKS, args.categories)
+    if not tasks:
+        print("No tasks match the category filter.", file=sys.stderr)
+        return 1
+
+    model = LocalModel(model_path=path)
+    print(f"Loading local model {path} ...", file=sys.stderr)
+    t0 = time.monotonic()
+    model.load()
+    print(f"Loaded in {time.monotonic() - t0:.1f}s\n"
+          f"Benchmarking local x {len(tasks)} task(s) (sequential on CPU)\n",
+          file=sys.stderr)
+
+    records = []
+    for task in tasks:  # sequential: llama.cpp serializes on one context anyway
+        policy = policy_for(task.category)
+        start = time.monotonic()
+        try:
+            answer, usage = model.complete_with_usage(
+                system=system_prompt_for(task.category),
+                user=task.prompt,
+                max_tokens=policy.max_tokens,
+                temperature=policy.temperature,
+            )
+            correct = verify(task.check, answer)
+            total, error = usage.total_tokens, ""
+        except Exception as exc:  # noqa: BLE001
+            answer, correct, total, error = "", False, 0, str(exc)[:100]
+        latency = round(time.monotonic() - start, 2)
+        print(f"  [{'ok ' if correct else 'MISS'}] {task.id:<8} {latency:>5.1f}s "
+              f"{total:>4}tok  {task.category.value}", file=sys.stderr)
+        records.append({
+            "model": "local", "task": task.id, "category": task.category.value,
+            "correct": correct, "tokens": total, "latency": latency, "error": error,
+        })
+
+    _report(records, ["local"], tasks, args.threshold)
+    pathlib.Path(args.out).write_text(json.dumps(records, indent=2), encoding="utf-8")
+    print(f"\nRaw records written to {args.out}", file=sys.stderr)
+    return 0
+
+
+def _filter_tasks(tasks, categories: str | None):
+    if not categories:
+        return list(tasks)
+    wanted = {c.strip() for c in categories.split(",")}
+    return [t for t in tasks if t.category.value in wanted]
 
 
 def main() -> int:
     args = _parse_args()
     _load_dotenv(ROOT / ".env")
+
+    if args.local is not None:
+        return _run_local(args)
+
     if args.models:
         os.environ["ALLOWED_MODELS"] = args.models
     if args.reasoning is not None:
@@ -75,10 +163,7 @@ def main() -> int:
         return 1
 
     models = list(config.allowed_models)
-    tasks = TASKS
-    if args.categories:
-        wanted = {c.strip() for c in args.categories.split(",")}
-        tasks = [t for t in tasks if t.category.value in wanted]
+    tasks = _filter_tasks(TASKS, args.categories)
     if not tasks:
         print("No tasks match the category filter.", file=sys.stderr)
         return 1

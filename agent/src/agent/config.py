@@ -46,6 +46,13 @@ def _env_int(name: str, default: int) -> int:
         raise ConfigError(f"{name} must be an integer, got {raw!r}.") from exc
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on")
+
+
 @dataclass(frozen=True)
 class Config:
     """Immutable snapshot of everything the agent needs to run."""
@@ -72,6 +79,12 @@ class Config:
     # If a model rejects it, the client transparently retries without it.
     reasoning_effort: str = "low"
 
+    # Local-first strategy: answer with the bundled local model first (zero
+    # Fireworks tokens) and escalate to the API only when the answer fails
+    # verification. Auto-disabled at startup if the weights aren't present, so
+    # the agent degrades gracefully to Fireworks-only.
+    local_enabled: bool = True
+
     @classmethod
     def from_env(cls) -> "Config":
         """Build a ``Config`` from the process environment, validating as we go."""
@@ -88,4 +101,5 @@ class Config:
             max_retries=max(0, _env_int("MAX_RETRIES", 2)),
             time_budget=max(30, _env_int("TIME_BUDGET", 540)),
             reasoning_effort=os.environ.get("REASONING_EFFORT", "low").strip(),
+            local_enabled=_env_bool("LOCAL_MODEL_ENABLED", True),
         )

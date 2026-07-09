@@ -16,6 +16,7 @@ import time
 
 from .config import Config, ConfigError
 from .fireworks_client import FireworksClient
+from .local_model import LocalModel, LocalModelError
 from .model_selector import ModelSelector
 from .pipeline import Pipeline, normalize_tasks
 
@@ -25,6 +26,31 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 logger = logging.getLogger("agent")
+
+
+def _init_local_model(config: Config) -> LocalModel | None:
+    """Build and warm the bundled local model, or return None to run
+    Fireworks-only. Loading eagerly here (a) surfaces load errors before task
+    processing and (b) keeps the first task's latency clean. Any failure —
+    disabled, weights absent, or load error — degrades gracefully to the API.
+    """
+    if not config.local_enabled:
+        logger.info("Local model disabled by config; using Fireworks only.")
+        return None
+    candidate = LocalModel()
+    if not candidate.available():
+        logger.warning(
+            "Local model enabled but weights not found at %s; using Fireworks only.",
+            candidate.model_path,
+        )
+        return None
+    try:
+        candidate.load()
+    except LocalModelError as exc:
+        logger.warning("Local model failed to load (%s); using Fireworks only.", exc)
+        return None
+    logger.info("Local model ready: %s", candidate.model_path)
+    return candidate
 
 
 def _read_tasks(path: str) -> list[dict]:
@@ -76,7 +102,8 @@ def main() -> int:
     logger.info("Loaded %d task(s)", len(tasks))
 
     client = FireworksClient(config)
-    pipeline = Pipeline(config, client, selector)
+    local = _init_local_model(config)
+    pipeline = Pipeline(config, client, selector, local=local)
 
     try:
         results = pipeline.run(tasks)

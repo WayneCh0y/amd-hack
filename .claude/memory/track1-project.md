@@ -9,7 +9,7 @@ This repo (`amd-hack`) is a submission for **AMD Developer Hackathon (ACT II) �
 
 **What it is:** a batch AI agent (NOT a chatbot) shipped as a Docker image. On startup it reads `/input/tasks.json`, solves each NL prompt across 8 capability categories (factual, math, sentiment, summarization, NER, code debugging, logical reasoning, code generation) using **Fireworks AI** models, writes `/output/results.json` (`[{task_id, answer}]`), and exits 0.
 
-**Scoring (two-stage):** (1) accuracy gate via LLM-Judge — below threshold = dropped; (2) among passers, ranked ascending by **total tokens** recorded by the Fireworks proxy. So the goal is *enough accuracy at minimum token cost*. This is an inference-orchestration problem, not model training.
+**Scoring (two-stage):** (1) accuracy gate via LLM-Judge — below threshold = dropped; (2) among passers, ranked ascending by **total tokens** recorded by the Fireworks proxy. So the goal is *enough accuracy at minimum token cost*. This is an inference-orchestration problem, not model training. Published specifics: gate = **80%**, exactly **19 fixed tasks** (need ≥16/19), local models count toward accuracy at **zero** token cost — see [[track1-launch-day-facts]].
 
 **Hard constraints (from `documentation/Participant Guide_ AMD Developer Hackathon (ACT II).pdf`):**
 - Read `FIREWORKS_API_KEY`, `FIREWORKS_BASE_URL`, `ALLOWED_MODELS` from env ONLY — never hardcode keys/URLs/model IDs. `ALLOWED_MODELS` is comma-separated, published launch day.

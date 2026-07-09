@@ -2,6 +2,44 @@
 
 ---
 
+# Part 0 — Launch-Day Facts (published, confirmed)
+
+> These override the earlier "unknown until launch day" placeholders. Source: official Discord clarifications + Participant Guide PDF.
+
+## Allowed models (`ALLOWED_MODELS`)
+
+These are the exact model IDs. Still read them from the env var at runtime — do **not** hardcode — but these are what launch day published:
+
+- `minimax-m3`
+- `kimi-k2p7-code`
+- `gemma-4-31b-it`
+- `gemma-4-26b-a4b-it`
+- `gemma-4-31b-it-nvfp4`
+
+## Scoring specifics
+
+- **Accuracy gate = 80%.** Below it, you're excluded from the leaderboard regardless of token count.
+- **Exactly 19 fixed tasks.** Every score is `n/19`, so the visible percentages are just arithmetic: `16/19 = 84.2%` (passes), `15/19 = 78.9%` (**fails** the 80% gate). **You need ≥ 16 of 19 correct.**
+- The **LLM judge is not perfectly deterministic** run-to-run — the same image can score slightly differently. Build margin above 16/19; don't sit exactly on the line.
+- Passers are ranked ascending by **total tokens recorded by the Fireworks proxy** (fewest wins).
+
+## Local models are a first-class strategy (biggest lever)
+
+- A container may answer tasks with a **bundled local model**; those answers **count fully toward accuracy**.
+- **Only tokens routed through `FIREWORKS_BASE_URL` count toward the token score.** A local model that answers correctly uses **zero Fireworks tokens — the best possible ranking outcome.**
+- `flagged: ZERO_API_CALLS` (a local-only run makes no proxy calls) is **not a failure** — it's an explicitly valid strategy.
+- **Grading environment: 4 GB RAM, 2 vCPU.** A 2B–3B 4-bit quantized model fits comfortably; a 7B 4-bit model fills the whole RAM budget, leaving no room for agent code. Size accordingly.
+- **No Ollama or model runtime is pre-installed** — bundle the model weights + runtime directly in the Docker image. The 10 GB compressed image limit still applies.
+- Implication: the ideal design answers the easy/deterministic categories locally (0 tokens) and only escalates to Fireworks when the local model is likely wrong — or, if a small local model clears 16/19 on its own, calls Fireworks **zero** times.
+
+## Operational limits
+
+- **Submissions are rate-limited to 10 per hour per team.** Test locally before spending a slot.
+- Your registry's **download/pull counter** (GitHub Packages, Docker Hub) indicates whether the graders have pulled your image yet — useful while the backlog clears.
+- General (all tracks): container ready < 60 s, < 30 s per request, English only, exit 0 on success.
+
+---
+
 # Part 1 — Understanding the Challenge
 
 ## What is the overarching idea?

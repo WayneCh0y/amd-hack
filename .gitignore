@@ -4,6 +4,7 @@
 !*.env.example
 agent/results.local.json
 results.local.json
+agent/benchmark_results.local.json
 
 # Python
 __pycache__/
@@ -12,3 +13,8 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+
+# Local model weights — downloaded/bundled into the image, never into git (GBs)
+agent/models/
+models/
+*.gguf
