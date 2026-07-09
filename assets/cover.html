@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0A0E17;
+    --bg-2: #0F172A;
+    --surface: #131A2A;
+    --border: #26324A;
+    --fg: #F8FAFC;
+    --muted: #8794AD;
+    --amd: #ED1C24;
+    --amd-soft: #FF3A42;
+    --cyan: #35D0E8;
+  }
+
+  html, body { width: 1920px; height: 1080px; background: var(--bg); overflow: hidden; }
+
+  .stage {
+    position: relative;
+    width: 1920px; height: 1080px;
+    font-family: 'Inter', sans-serif;
+    color: var(--fg);
+    background:
+      radial-gradient(1100px 700px at 82% 30%, rgba(237,28,36,0.16), transparent 60%),
+      radial-gradient(900px 600px at 12% 88%, rgba(53,208,232,0.10), transparent 62%),
+      linear-gradient(160deg, #0A0E17 0%, #0C1120 55%, #090C14 100%);
+  }
+
+  /* subtle dot grid */
+  .grid {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,0.045) 1.3px, transparent 1.3px);
+    background-size: 40px 40px;
+    mask-image: linear-gradient(120deg, black 0%, transparent 75%);
+    -webkit-mask-image: linear-gradient(120deg, black 0%, transparent 75%);
+  }
+
+  /* top bar */
+  .topbar {
+    position: absolute; top: 64px; left: 96px; right: 96px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .brand { display: flex; align-items: center; gap: 16px; }
+  .brand .mark {
+    width: 44px; height: 44px; border-radius: 11px;
+    background: linear-gradient(150deg, var(--amd), #B3141A);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 26px rgba(237,28,36,0.45);
+  }
+  .brand .mark svg { width: 26px; height: 26px; }
+  .brand .name { font-size: 22px; font-weight: 700; letter-spacing: 0.5px; }
+  .brand .name span { color: var(--muted); font-weight: 500; }
+
+  .badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 15px; font-weight: 500; letter-spacing: 1px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 9px 20px;
+    background: rgba(255,255,255,0.02);
+  }
+  .badge b { color: var(--amd-soft); font-weight: 600; }
+
+  /* main content */
+  .content {
+    position: absolute; left: 96px; top: 300px; max-width: 1040px;
+  }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 17px; letter-spacing: 4px; text-transform: uppercase;
+    color: var(--cyan); font-weight: 500;
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 26px;
+  }
+  .eyebrow::before { content:""; width: 46px; height: 2px; background: var(--cyan); display:inline-block; }
+
+  h1 {
+    font-size: 118px; line-height: 0.98; font-weight: 800; letter-spacing: -3px;
+  }
+  h1 .accent {
+    background: linear-gradient(100deg, var(--amd-soft), var(--amd) 60%, #ff6a6f);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 0 42px rgba(237,28,36,0.28);
+  }
+  .sub {
+    margin-top: 30px; font-size: 27px; line-height: 1.5; color: #C7D0E0;
+    font-weight: 400; max-width: 820px;
+  }
+  .sub b { color: var(--fg); font-weight: 600; }
+
+  .metrics { margin-top: 46px; display: flex; gap: 46px; }
+  .metric .k { font-size: 40px; font-weight: 700; letter-spacing: -1px; }
+  .metric .k small { font-size: 20px; color: var(--muted); font-weight: 500; margin-left: 4px;}
+  .metric .l { font-size: 15px; color: var(--muted); margin-top: 4px; letter-spacing: 0.4px; }
+  .metric.amd .k { color: var(--amd-soft); }
+
+  /* pipeline card on the right */
+  .pipe {
+    position: absolute; right: 96px; top: 322px;
+    width: 470px;
+    background: linear-gradient(180deg, rgba(19,26,42,0.92), rgba(12,17,30,0.92));
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: 30px 30px 26px;
+    box-shadow: 0 40px 90px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+    backdrop-filter: blur(6px);
+  }
+  .pipe-head {
+    display:flex; align-items:center; gap:10px; margin-bottom: 22px;
+    font-family:'JetBrains Mono', monospace; font-size:14px; color: var(--muted);
+  }
+  .dot { width:11px; height:11px; border-radius:50%; }
+  .dot.r{background:#FF5F56;} .dot.y{background:#FFBD2E;} .dot.g{background:#27C93F;}
+  .pipe-head .t { margin-left: 8px; }
+
+  .node {
+    display:flex; align-items:center; gap:16px;
+    border:1px solid var(--border); border-radius: 14px;
+    padding: 16px 18px; background: rgba(255,255,255,0.02);
+  }
+  .node .ico { width:42px; height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; flex:none; }
+  .node .ico svg{ width:22px; height:22px; }
+  .node .tx .top { font-family:'JetBrains Mono', monospace; font-size:16px; font-weight:600; }
+  .node .tx .bt { font-size:13px; color: var(--muted); margin-top:2px; }
+  .node.in .ico { background: rgba(53,208,232,0.14); color: var(--cyan); }
+  .node.agent .ico { background: linear-gradient(150deg, var(--amd), #B3141A); color:#fff; box-shadow:0 0 20px rgba(237,28,36,0.5); }
+  .node.out .ico { background: rgba(39,201,63,0.14); color:#27C93F; }
+  .node.agent { border-color: rgba(237,28,36,0.4); background: rgba(237,28,36,0.06); }
+
+  .arrow { display:flex; justify-content:center; padding: 9px 0; color: var(--border); }
+  .arrow svg{ width:20px; height:20px; }
+
+  .stat-row {
+    margin-top: 22px; padding-top: 20px; border-top:1px dashed var(--border);
+    display:flex; justify-content: space-between; align-items:center;
+    font-family:'JetBrains Mono', monospace;
+  }
+  .stat-row .lab { font-size:13px; color: var(--muted); }
+  .stat-row .val { font-size:15px; color: var(--fg); }
+  .stat-row .val b { color:#27C93F; }
+
+  /* footer */
+  .footer {
+    position:absolute; left:96px; bottom:60px; right:96px;
+    display:flex; justify-content: space-between; align-items:center;
+    font-size:16px; color: var(--muted); letter-spacing:0.4px;
+    border-top:1px solid var(--border); padding-top: 24px;
+  }
+  .footer .stack { display:flex; gap:26px; align-items:center; }
+  .footer .stack span { display:flex; align-items:center; gap:8px; }
+  .chip { width:8px;height:8px;border-radius:50%; }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="grid"></div>
+
+    <div class="topbar">
+      <div class="brand">
+        <div class="mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M12 22V12"/><path d="M3 7l9 5 9-5"/>
+          </svg>
+        </div>
+        <div class="name">Group <span>/ AMD Hackathon</span></div>
+      </div>
+      <div class="badge">ACT II &nbsp;·&nbsp; TRACK 1 &nbsp;·&nbsp; <b>General-Purpose AI Agent</b></div>
+    </div>
+
+    <div class="content">
+      <div class="eyebrow">Batch Inference Agent</div>
+      <h1>Answers in,<br><span class="accent">tokens out.</span></h1>
+      <p class="sub">A containerized <b>batch AI agent</b> — reads every task, routes it to the right model on Fireworks, and returns clean JSON. Built for <b>maximum accuracy at minimum token cost.</b></p>
+
+      <div class="metrics">
+        <div class="metric amd"><div class="k">&lt;10<small>min</small></div><div class="l">Total runtime</div></div>
+        <div class="metric"><div class="k">&lt;30<small>s</small></div><div class="l">Per request</div></div>
+        <div class="metric"><div class="k">exit 0</div><div class="l">Deterministic</div></div>
+      </div>
+    </div>
+
+    <div class="pipe">
+      <div class="pipe-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="t">agent · pipeline</span></div>
+
+      <div class="node in">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+        <div class="tx"><div class="top">tasks.json</div><div class="bt">N prompts · read from /input</div></div>
+      </div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></div>
+
+      <div class="node agent">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4"/><circle cx="9" cy="14" r="1.2"/><circle cx="15" cy="14" r="1.2"/><path d="M2 13v3M22 13v3"/></svg></div>
+        <div class="tx"><div class="top">route &amp; solve</div><div class="bt">heuristics + Fireworks models</div></div>
+      </div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></div>
+
+      <div class="node out">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <div class="tx"><div class="top">results.json</div><div class="bt">{ task_id, answer } · /output</div></div>
+      </div>
+
+      <div class="stat-row">
+        <div class="lab">tokens / task</div>
+        <div class="val"><b>minimized</b> ↓&nbsp;&nbsp;·&nbsp;&nbsp;temp 0</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div>AMD Developer Hackathon · ACT II — Track 1 Submission</div>
+      <div class="stack">
+        <span><i class="chip" style="background:var(--amd)"></i>Docker · linux/amd64</span>
+        <span><i class="chip" style="background:var(--cyan)"></i>Python</span>
+        <span><i class="chip" style="background:#27C93F"></i>Fireworks AI</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
