@@ -35,7 +35,7 @@ if str(_AGENT_SRC) not in sys.path:
 # bundled 3B model). We re-implement the escalation half of the orchestration
 # loop here using the same building blocks the container uses.
 from agent.categories import Tier, policy_for  # noqa: E402
-from agent.config import Config, ConfigError  # noqa: E402
+from agent.config import Config  # noqa: E402
 from agent.fireworks_client import FireworksClient  # noqa: E402
 from agent.model_selector import ModelSelector  # noqa: E402
 from agent.prompts import system_prompt_for  # noqa: E402
@@ -52,26 +52,46 @@ st.set_page_config(
 
 
 # --- credentials / config ----------------------------------------------------
-def _load_secrets_into_env() -> None:
-    """Copy Streamlit secrets into the env vars the agent reads (env-only rule)."""
-    for name in ("FIREWORKS_API_KEY", "FIREWORKS_BASE_URL", "ALLOWED_MODELS"):
+# Bring-your-own-key: the hosted demo must never spend the authors' Fireworks
+# credits, so the API key is supplied by each visitor at runtime and kept in
+# session state only. The base URL and allowed-model list are neither secret nor
+# costly, so we prefill them from the app's secrets/env when present.
+_PUBLIC_SETTINGS = ("FIREWORKS_BASE_URL", "ALLOWED_MODELS")
+
+
+def _load_public_settings_into_env() -> None:
+    """Copy only the NON-secret settings from Streamlit secrets into env.
+
+    Deliberately excludes FIREWORKS_API_KEY so a public link can never bill us.
+    """
+    for name in _PUBLIC_SETTINGS:
         if name not in os.environ and name in st.secrets:
             os.environ[name] = str(st.secrets[name])
 
 
+def _split_models(raw: str) -> list[str]:
+    return [m.strip() for m in raw.split(",") if m.strip()]
+
+
 @st.cache_resource(show_spinner=False)
-def _build_agent() -> tuple[Config | None, FireworksClient | None, ModelSelector | None, str]:
-    """Build the real Config + Fireworks client from env, or return why we can't."""
+def _build_client(
+    api_key: str, base_url: str, models_csv: str
+) -> tuple[FireworksClient | None, ModelSelector | None, str]:
+    """Build a Fireworks client from a visitor-supplied key.
+
+    Cached per (key, base_url, models) so the token meter survives reruns instead
+    of rebuilding on every interaction. Returns (client, selector, error).
+    """
+    models = _split_models(models_csv)
+    if not (api_key and base_url and models):
+        return None, None, "Enter your API key, base URL, and allowed models."
     try:
-        cfg = Config.from_env()
-    except ConfigError as exc:
-        return None, None, None, str(exc)
-    try:
+        cfg = Config(api_key=api_key, base_url=base_url, allowed_models=models)
         client = FireworksClient(cfg)
-        selector = ModelSelector(cfg.allowed_models)
+        selector = ModelSelector(models)
     except Exception as exc:  # noqa: BLE001
-        return None, None, None, f"Failed to init Fireworks client: {exc}"
-    return cfg, client, selector, ""
+        return None, None, f"Failed to init Fireworks client: {exc}"
+    return client, selector, ""
 
 
 @st.cache_data(show_spinner=False)
@@ -92,13 +112,40 @@ def _load_trace() -> list[dict] | None:
         return None
 
 
-_load_secrets_into_env()
-cfg, client, selector, cfg_error = _build_agent()
+_load_public_settings_into_env()
 
 if "fw_tokens" not in st.session_state:
     st.session_state.fw_tokens = 0
 if "local_answered" not in st.session_state:
     st.session_state.local_answered = 0
+
+# --- sidebar: bring-your-own-key ---------------------------------------------
+with st.sidebar:
+    st.header("Bring your own Fireworks key")
+    st.markdown(
+        "This hosted demo never spends the authors' credits. To run the **live "
+        "escalation** step, paste your own Fireworks API key — it stays in this "
+        "browser session only (never logged, never stored)."
+    )
+    api_key = st.text_input(
+        "FIREWORKS_API_KEY",
+        type="password",
+        value=st.session_state.get("byok_key", ""),
+        help="From fireworks.ai. Used only for calls you trigger, on your account.",
+    )
+    base_url = st.text_input(
+        "FIREWORKS_BASE_URL",
+        value=os.environ.get("FIREWORKS_BASE_URL", ""),
+        help="OpenAI-compatible endpoint your key is for.",
+    )
+    models_csv = st.text_input(
+        "ALLOWED_MODELS (comma-separated)",
+        value=os.environ.get("ALLOWED_MODELS", ""),
+    )
+    st.session_state.byok_key = api_key
+    st.caption("No key? You can still run the zero-token router below.")
+
+client, selector, cfg_error = _build_client(api_key, base_url, models_csv)
 
 
 # --- header ------------------------------------------------------------------
@@ -115,18 +162,23 @@ col_a.metric("Fireworks tokens used (this session)", f"{st.session_state.fw_toke
 col_b.metric("Answered by router only (0 tokens)", "every task")
 col_c.metric(
     "Fireworks connected",
-    "yes" if client is not None else "no (add secrets)",
+    "yes (your key)" if client is not None else "no (add your key)",
 )
 
 if client is None:
-    st.info(
-        "**Router runs without any credentials** — try it below. To enable the "
-        "live Fireworks escalation path, add `FIREWORKS_API_KEY`, "
-        "`FIREWORKS_BASE_URL`, and `ALLOWED_MODELS` in the app's **Secrets**.\n\n"
-        f"_Reason inference is disabled:_ {cfg_error}"
+    msg = (
+        "**The zero-token router runs without any key** — try it below. To run "
+        "the **live Fireworks escalation** step, paste *your own* "
+        "`FIREWORKS_API_KEY` in the sidebar. Bring-your-own-key means this public "
+        "demo can never bill the authors."
     )
+    if api_key and cfg_error:
+        msg += f"\n\n_Couldn't connect with that key:_ {cfg_error}"
+    st.info(msg)
 else:
-    st.caption(f"Allowed models (from `ALLOWED_MODELS`): {selector.describe()}")
+    st.caption(
+        f"Using your key · allowed models (from `ALLOWED_MODELS`): {selector.describe()}"
+    )
 
 live_tab, bench_tab, how_tab = st.tabs(
     ["▶︎ Live pipeline", "Benchmark story", "How it works"]
@@ -187,7 +239,7 @@ def _run_pipeline(prompt: str) -> None:
 
     st.markdown("#### 3 · Escalation — Fireworks via `FIREWORKS_BASE_URL`")
     if client is None:
-        st.warning("Add Fireworks secrets to run this step live.")
+        st.warning("Add your Fireworks API key in the sidebar to run this step live.")
         return
 
     model = selector.small() if policy.tier is Tier.SMALL else selector.large()
