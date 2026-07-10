@@ -46,7 +46,7 @@ TRACE_PATH = _REPO / "demo" / "trace.json"
 
 st.set_page_config(
     page_title="AMD Track 1 — Local-First Batch Agent",
-    page_icon="⚡",
+    page_icon="",
     layout="wide",
 )
 
@@ -102,7 +102,7 @@ if "local_answered" not in st.session_state:
 
 
 # --- header ------------------------------------------------------------------
-st.title("⚡ Local-First Batch Agent — AMD Developer Hackathon, Track 1")
+st.title("Local-First Batch Agent — AMD Developer Hackathon, Track 1")
 st.markdown(
     "A batch agent that wins on **token efficiency**: a bundled local model "
     "answers most tasks at **zero Fireworks tokens**, and only failures escalate "
@@ -115,7 +115,7 @@ col_a.metric("Fireworks tokens used (this session)", f"{st.session_state.fw_toke
 col_b.metric("Answered by router only (0 tokens)", "every task")
 col_c.metric(
     "Fireworks connected",
-    "✅ yes" if client is not None else "⚠️ no (add secrets)",
+    "yes" if client is not None else "no (add secrets)",
 )
 
 if client is None:
@@ -129,7 +129,7 @@ else:
     st.caption(f"Allowed models (from `ALLOWED_MODELS`): {selector.describe()}")
 
 live_tab, bench_tab, how_tab = st.tabs(
-    ["▶︎ Live pipeline", "📊 Benchmark story", "🧠 How it works"]
+    ["▶︎ Live pipeline", "Benchmark story", "How it works"]
 )
 
 
