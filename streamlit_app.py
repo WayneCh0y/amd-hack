@@ -138,6 +138,29 @@ def _tier_label(tier: Tier) -> str:
     return "SMALL (cheap)" if tier is Tier.SMALL else "LARGE (capable)"
 
 
+def _md_table(rows: list[dict]) -> str:
+    """Render rows as a GitHub-flavoured Markdown table.
+
+    Deliberately avoids ``st.dataframe``/``st.table``: those serialize through
+    pyarrow, which segfaults on Streamlit Cloud's current pandas 3 / pyarrow /
+    numpy / Python 3.14 stack. A plain Markdown table needs none of that.
+    """
+    if not rows:
+        return "_(no rows)_"
+    headers = list(rows[0].keys())
+
+    def esc(v: object) -> str:
+        return str(v).replace("|", "\\|").replace("\n", " ")
+
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+    ]
+    for r in rows:
+        lines.append("| " + " | ".join(esc(r.get(h, "")) for h in headers) + " |")
+    return "\n".join(lines)
+
+
 def _run_pipeline(prompt: str) -> None:
     """Faithfully run the router → policy → (local-first) → Fireworks path."""
     t0 = time.monotonic()
@@ -238,19 +261,19 @@ with bench_tab:
         m1.metric("Tasks", len(trace))
         m2.metric("Answered locally (0 tokens)", f"{local_kept}/{len(trace)}")
         m3.metric("Total Fireworks tokens", f"{total_tokens:,}")
-        st.dataframe(
-            [
-                {
-                    "task_id": r.get("task_id"),
-                    "category": r.get("category"),
-                    "source": r.get("source"),
-                    "fireworks_tokens": r.get("fireworks_tokens", 0),
-                    "answer": (r.get("final_answer") or "")[:80],
-                }
-                for r in trace
-            ],
-            use_container_width=True,
-            hide_index=True,
+        st.markdown(
+            _md_table(
+                [
+                    {
+                        "task_id": r.get("task_id"),
+                        "category": r.get("category"),
+                        "source": r.get("source"),
+                        "fireworks_tokens": r.get("fireworks_tokens", 0),
+                        "answer": (r.get("final_answer") or "")[:80],
+                    }
+                    for r in trace
+                ]
+            )
         )
     else:
         st.info(
@@ -272,7 +295,7 @@ with bench_tab:
                     "prompt": t["prompt"][:70] + "…",
                 }
             )
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+        st.markdown(_md_table(rows))
         st.caption(
             "Dev-benchmark headline (40 labelled tasks): the bundled local model "
             "alone scored **36/40 (90%)** across all 8 categories — i.e. most of "
