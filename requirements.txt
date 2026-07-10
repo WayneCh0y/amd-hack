@@ -1,0 +1,6 @@
+# Dependencies for the Streamlit demo (streamlit_app.py) ONLY.
+# The graded Docker image uses agent/requirements.txt instead; this file is what
+# Streamlit Community Cloud installs. Deliberately NO llama-cpp-python here — the
+# bundled local model can't run on the free tier, and the demo doesn't load it.
+streamlit>=1.40.0
+openai>=1.30.0
