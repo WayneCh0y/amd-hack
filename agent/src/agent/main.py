@@ -103,7 +103,9 @@ def main() -> int:
 
     client = FireworksClient(config)
     local = _init_local_model(config)
-    pipeline = Pipeline(config, client, selector, local=local)
+    # started=process start: the model load above is part of the container's
+    # wall-clock budget, so the deadline has to count it.
+    pipeline = Pipeline(config, client, selector, local=local, started_at=start)
 
     try:
         results = pipeline.run(tasks)

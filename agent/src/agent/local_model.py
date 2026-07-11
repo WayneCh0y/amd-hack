@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -40,11 +41,22 @@ class LocalModelError(RuntimeError):
 @dataclass(frozen=True)
 class LocalUsage:
     """Local token counts. These do NOT count toward the competition score;
-    tracked only for benchmarking (latency / sizing)."""
+    tracked only for benchmarking (latency / sizing).
+
+    ``finish_reason`` is ``"stop"`` for a complete answer, ``"length"`` when the
+    token cap cut it off, and ``"timeout"`` when the wall-clock cap did. The two
+    latter mean the text is a *fragment*: callers must escalate rather than trust
+    it, since a truncated answer can still look structurally valid.
+    """
 
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    finish_reason: str = "stop"
+
+    @property
+    def truncated(self) -> bool:
+        return self.finish_reason in ("length", "timeout")
 
 
 class LocalModel:
@@ -127,10 +139,15 @@ class LocalModel:
         user: str,
         max_tokens: int,
         temperature: float = 0.0,
+        timeout: float | None = None,
     ) -> str:
         """Run one chat completion locally and return the assistant text."""
         text, _ = self.complete_with_usage(
-            system=system, user=user, max_tokens=max_tokens, temperature=temperature
+            system=system,
+            user=user,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
         )
         return text
 
@@ -141,8 +158,15 @@ class LocalModel:
         user: str,
         max_tokens: int,
         temperature: float = 0.0,
+        timeout: float | None = None,
     ) -> tuple[str, LocalUsage]:
-        """Like :meth:`complete` but also returns local token usage."""
+        """Like :meth:`complete` but also returns local token usage.
+
+        ``timeout`` bounds wall-clock generation. CPU decoding on the 2-vCPU
+        grading box runs at single-digit tokens/sec, so an uncapped generation
+        can run for minutes and eat the whole container budget. The clock starts
+        when *this* call begins decoding, not when it queued behind ``_gen_lock``.
+        """
         self.load()
         assert self._llm is not None
 
@@ -153,6 +177,8 @@ class LocalModel:
 
         # llama.cpp shares one context: serialize generations.
         with self._gen_lock:
+            if timeout and timeout > 0:
+                return self._generate_bounded(messages, max_tokens, temperature, timeout)
             response = self._llm.create_chat_completion(
                 messages=messages,
                 max_tokens=max_tokens,
@@ -167,6 +193,53 @@ class LocalModel:
             prompt_tokens=int(usage.get("prompt_tokens", 0) or 0),
             completion_tokens=int(usage.get("completion_tokens", 0) or 0),
             total_tokens=int(usage.get("total_tokens", 0) or 0),
+            finish_reason=choice.get("finish_reason") or "stop",
+        )
+
+    def _generate_bounded(
+        self, messages: list[dict], max_tokens: int, temperature: float, timeout: float
+    ) -> tuple[str, LocalUsage]:
+        """Generate with a wall-clock ceiling, by streaming and cutting the stream.
+
+        ``create_chat_completion`` takes no ``stopping_criteria`` (only the raw
+        ``create_completion`` does), and a blocking call cannot be cancelled from
+        another thread — it runs in C. Streaming is the one interruption point the
+        chat API gives us: we check the clock between tokens and close the
+        generator, which unwinds llama.cpp's sampling loop.
+
+        Caller must already hold ``_gen_lock``.
+        """
+        deadline = time.monotonic() + timeout
+        stream = self._llm.create_chat_completion(
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            seed=self._seed,
+            stream=True,
+        )
+
+        parts: list[str] = []
+        completion_tokens = 0
+        finish_reason = "stop"
+        try:
+            for chunk in stream:
+                choice = chunk["choices"][0]
+                piece = (choice.get("delta") or {}).get("content")
+                if piece:
+                    parts.append(piece)
+                    completion_tokens += 1  # llama.cpp yields one token per chunk
+                if choice.get("finish_reason"):
+                    finish_reason = choice["finish_reason"]
+                if time.monotonic() >= deadline:
+                    finish_reason = "timeout"
+                    break
+        finally:
+            stream.close()
+
+        return "".join(parts).strip(), LocalUsage(
+            completion_tokens=completion_tokens,
+            total_tokens=completion_tokens,
+            finish_reason=finish_reason,
         )
 
 

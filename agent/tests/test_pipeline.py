@@ -11,6 +11,7 @@ from __future__ import annotations
 import pathlib
 import sys
 import threading
+import time
 from collections import defaultdict
 
 import pytest
@@ -19,6 +20,7 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC))
 
 from agent.config import Config  # noqa: E402
+from agent.local_model import LocalUsage  # noqa: E402
 from agent.model_selector import ModelSelector  # noqa: E402
 from agent.pipeline import Pipeline, Task, normalize_tasks  # noqa: E402
 
@@ -58,22 +60,31 @@ class FakeClient:
 
 
 class FakeLocal:
-    """Stub local model with the same ``complete`` kwargs Pipeline uses.
+    """Stub local model with the same ``complete_with_usage`` kwargs Pipeline uses.
 
     Returns a scripted answer (or raises a queued Exception). Records calls so
-    tests can assert the local path was exercised.
+    tests can assert the local path was exercised, and how it was bounded.
     """
 
-    def __init__(self, answer):
+    def __init__(self, answer, finish_reason: str = "stop", sleep: float = 0.0):
         self._answer = answer
+        self._finish_reason = finish_reason
+        self._sleep = sleep
         self.calls: list[str] = []
+        self.max_tokens: list[int] = []
+        self.timeouts: list[float | None] = []
 
-    def complete(self, *, system: str, user: str, max_tokens: int,
-                 temperature: float = 0.0) -> str:
+    def complete_with_usage(self, *, system: str, user: str, max_tokens: int,
+                            temperature: float = 0.0,
+                            timeout: float | None = None) -> tuple[str, LocalUsage]:
         self.calls.append(user)
+        self.max_tokens.append(max_tokens)
+        self.timeouts.append(timeout)
+        if self._sleep:
+            time.sleep(self._sleep)
         if isinstance(self._answer, Exception):
             raise self._answer
-        return self._answer
+        return self._answer, LocalUsage(finish_reason=self._finish_reason)
 
 
 def _config(**overrides) -> Config:
@@ -241,6 +252,70 @@ def test_local_exception_escalates():
     results = pipeline.run([Task(task_id="q", prompt="Capital of France?")])
 
     assert results == [{"task_id": "q", "answer": "fallback answer"}]
+
+
+@pytest.mark.parametrize("reason", ["length", "timeout"])
+def test_truncated_local_answer_escalates(reason):
+    # A truncated answer is a fragment: this one would sail through the MATH
+    # verifier (it contains a number) but the derivation was cut off mid-way, so
+    # trusting it would silently ship a wrong answer. Truncation must escalate
+    # regardless of how well-formed the fragment looks.
+    client = FakeClient({SMALL_MODEL: ["36"], LARGE_MODEL: ["36"]})
+    local = FakeLocal("First, 10% of 240 is 24, so 5% is 12", finish_reason=reason)
+    pipeline = _pipeline(client, local=local)
+
+    results = pipeline.run([Task(task_id="m", prompt="Calculate 15% of 240.")])
+
+    assert results == [{"task_id": "m", "answer": "36"}]
+    assert len(client.calls) >= 1  # escalated despite passing _has_number
+
+
+def test_local_calls_are_bounded_by_config():
+    # The per-category cap is sized for Fireworks (1024 for math); locally that
+    # is minutes of CPU decoding, so it must be clamped to local_max_tokens and
+    # carry a wall-clock timeout.
+    client = FakeClient({LARGE_MODEL: ["42"]})
+    local = FakeLocal("Answer: 42")
+    pipeline = _pipeline(client, local=local, local_max_tokens=64, local_task_timeout=9)
+
+    pipeline.run([Task(task_id="m", prompt="Calculate 15% of 240.")])
+
+    assert local.max_tokens == [64]
+    assert local.timeouts == [9.0]
+
+
+def test_local_budget_exhaustion_escalates_the_rest():
+    # The local phase is serialized, so its cost is the SUM over tasks. Once the
+    # budget is spent the remaining tasks must go straight to Fireworks rather
+    # than run the container past its hard limit.
+    client = FakeClient({SMALL_MODEL: ["from fireworks"] * 5})
+    local = FakeLocal("Paris", sleep=0.05)
+    pipeline = _pipeline(client, local=local, local_budget=1, local_task_timeout=1)
+
+    tasks = [Task(task_id=f"t{i}", prompt=f"Capital of country {i}?") for i in range(5)]
+    # Budget is 1s and the phase stops with <=1s left, so no local call fits.
+    results = pipeline.run(tasks)
+
+    assert [r["task_id"] for r in results] == [f"t{i}" for i in range(5)]
+    assert local.calls == []
+    assert len(client.calls) == 5
+
+
+def test_local_phase_runs_cheapest_tasks_first():
+    # Ordering by token cap fits the most tasks into a fixed budget, which is
+    # what maximises the Fireworks tokens saved.
+    client = FakeClient({})
+    local = FakeLocal("positive")
+    pipeline = _pipeline(client, local=local)
+
+    tasks = [
+        Task(task_id="math", prompt="Calculate 15% of 240."),          # cap 1024
+        Task(task_id="sent", prompt="What is the sentiment of: great!"),  # cap 256
+    ]
+    pipeline.run(tasks)
+
+    # Sentiment (cheapest) is attempted before math, despite input order.
+    assert local.calls[0].startswith("What is the sentiment")
     assert len(client.calls) >= 1
 
 

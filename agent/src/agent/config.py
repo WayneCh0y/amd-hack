@@ -84,6 +84,28 @@ class Config:
     # verification. Auto-disabled at startup if the weights aren't present, so
     # the agent degrades gracefully to Fireworks-only.
     local_enabled: bool = True
+    # Wall-clock ceiling for the whole local phase, and the load-bearing safety
+    # property of this agent. Local generation is serialized (one llama.cpp
+    # context), so the phase costs the SUM over tasks, not the max. Measured on a
+    # 2-vCPU box, each task costs a fixed ~15s of prompt prefill (compute-bound;
+    # it is paid even for a one-word answer) plus ~0.12s per generated token, so
+    # all 19 sample tasks run to ~416s locally. That fits 600s — but only just,
+    # and only on the hardware we measured.
+    #
+    # The budget makes that safe without having to predict the grading box: we
+    # answer as many tasks locally as it allows and escalate the rest, so a
+    # slower CPU costs Fireworks tokens rather than a TIMEOUT (the failure that
+    # scores zero). Do not raise it to chase a better token rank.
+    local_budget: int = 300
+    # Backstop for a single local generation. Sized above the measured worst case
+    # (~33s) so it does not fire on healthy tasks: cutting a generation off
+    # mid-prefill throws away the prefill and buys nothing.
+    local_task_timeout: int = 45
+    # Output-token ceiling for local answers. The per-category caps are sized for
+    # Fireworks (1024 for math/code); locally that is ~2 minutes of decode. At 384
+    # nothing in the sample set truncates (worst observed: 165 tokens) while the
+    # worst case stays bounded at ~46s of decode.
+    local_max_tokens: int = 384
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -102,4 +124,7 @@ class Config:
             time_budget=max(30, _env_int("TIME_BUDGET", 540)),
             reasoning_effort=os.environ.get("REASONING_EFFORT", "low").strip(),
             local_enabled=_env_bool("LOCAL_MODEL_ENABLED", True),
+            local_budget=max(0, _env_int("LOCAL_TIME_BUDGET", 300)),
+            local_task_timeout=max(1, _env_int("LOCAL_TASK_TIMEOUT", 45)),
+            local_max_tokens=max(1, _env_int("LOCAL_MAX_TOKENS", 384)),
         )
