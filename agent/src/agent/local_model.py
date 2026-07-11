@@ -140,6 +140,7 @@ class LocalModel:
         max_tokens: int,
         temperature: float = 0.0,
         timeout: float | None = None,
+        deadline: float | None = None,
     ) -> str:
         """Run one chat completion locally and return the assistant text."""
         text, _ = self.complete_with_usage(
@@ -148,6 +149,7 @@ class LocalModel:
             max_tokens=max_tokens,
             temperature=temperature,
             timeout=timeout,
+            deadline=deadline,
         )
         return text
 
@@ -159,13 +161,24 @@ class LocalModel:
         max_tokens: int,
         temperature: float = 0.0,
         timeout: float | None = None,
+        deadline: float | None = None,
     ) -> tuple[str, LocalUsage]:
         """Like :meth:`complete` but also returns local token usage.
 
-        ``timeout`` bounds wall-clock generation. CPU decoding on the 2-vCPU
-        grading box runs at single-digit tokens/sec, so an uncapped generation
-        can run for minutes and eat the whole container budget. The clock starts
-        when *this* call begins decoding, not when it queued behind ``_gen_lock``.
+        ``timeout`` bounds wall-clock generation, measured from when this call
+        starts decoding. CPU decoding on the 2-vCPU grading box runs at
+        single-digit tokens/sec, so an uncapped generation runs for minutes.
+
+        ``deadline`` (absolute ``time.monotonic()``) bounds the call *including*
+        the time it spends queued. Generations serialize on one llama.cpp context,
+        so concurrent callers queue — and a caller that checked the clock before
+        queueing can still start a 45s generation long after its budget expired.
+        Several of them behind one lock is an unbounded tail; that is what ran the
+        container past its 10-minute limit. Pass a deadline and the wait is capped,
+        then rechecked once the lock is actually held.
+
+        Raises :class:`LocalModelError` if the deadline passes before decoding can
+        start — callers escalate, which is always safe.
         """
         self.load()
         assert self._llm is not None
@@ -175,8 +188,21 @@ class LocalModel:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": user})
 
-        # llama.cpp shares one context: serialize generations.
-        with self._gen_lock:
+        # llama.cpp shares one context: serialize generations. Bounded, so a queue
+        # of callers can't outlive the run's budget.
+        if not self._acquire_gen_lock(deadline):
+            raise LocalModelError(
+                "Timed out waiting for the local model; another generation holds it."
+            )
+        try:
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise LocalModelError("Deadline passed while queued for the local model.")
+                # Re-derive the budget now that we hold the lock: whatever we
+                # planned before queueing is stale.
+                timeout = min(timeout, remaining) if timeout else remaining
+
             if timeout and timeout > 0:
                 return self._generate_bounded(messages, max_tokens, temperature, timeout)
             response = self._llm.create_chat_completion(
@@ -185,6 +211,8 @@ class LocalModel:
                 temperature=temperature,
                 seed=self._seed,
             )
+        finally:
+            self._gen_lock.release()
 
         choice = response["choices"][0]
         content = (choice.get("message", {}).get("content") or "").strip()
@@ -196,6 +224,13 @@ class LocalModel:
             finish_reason=choice.get("finish_reason") or "stop",
         )
 
+    def _acquire_gen_lock(self, deadline: float | None) -> bool:
+        """Take the generation lock, waiting no longer than ``deadline`` allows."""
+        if deadline is None:
+            self._gen_lock.acquire()
+            return True
+        return self._gen_lock.acquire(timeout=max(0.0, deadline - time.monotonic()))
+
     def _generate_bounded(
         self, messages: list[dict], max_tokens: int, temperature: float, timeout: float
     ) -> tuple[str, LocalUsage]:
@@ -206,6 +241,14 @@ class LocalModel:
         another thread — it runs in C. Streaming is the one interruption point the
         chat API gives us: we check the clock between tokens and close the
         generator, which unwinds llama.cpp's sampling loop.
+
+        **This bounds decoding, not prefill.** No token is yielded until the whole
+        prompt has been evaluated, so there is no clock to check during prefill —
+        and prefill is the dominant cost on 2 vCPU. A long enough prompt overruns
+        ``timeout`` no matter what we set it to. The bound that actually holds is
+        on the *input*: see ``Config.local_max_prompt_chars``, which keeps oversized
+        prompts out of the local phase entirely. The watchdog in ``main`` is the
+        backstop for whatever slips through.
 
         Caller must already hold ``_gen_lock``.
         """

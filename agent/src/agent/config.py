@@ -68,11 +68,35 @@ class Config:
     request_timeout: int = 25
     # Number of tasks processed in parallel. Threads are fine: work is IO-bound.
     max_concurrency: int = 8
-    # Retries per request on transient errors (429/5xx/timeouts).
-    max_retries: int = 2
-    # Overall wall-clock budget (seconds). Kept under the 10-min hard limit so
-    # we always have time to write results.json before the container is killed.
-    time_budget: int = 540
+    # Retries per request on transient errors (429/5xx/timeouts). Each attempt can
+    # cost a full `request_timeout`, and the pipeline tries two model tiers, so the
+    # worst case per task is 2 * (max_retries + 1) * request_timeout. At the old
+    # value of 2 that was 150s for ONE task — "excessive retries" is exactly what
+    # the guide lists as a cause of TIMEOUT. Attempts are also deadline-clamped now
+    # (see fireworks_client), so this is a second line of defence rather than the
+    # only one.
+    max_retries: int = 1
+    # Soft wall-clock budget (seconds): past this, no new inference is *started*
+    # and outstanding work is cut short. It is not a hard stop — see hard_budget.
+    time_budget: int = 420
+    # Hard wall-clock budget (seconds). At this point the watchdog writes whatever
+    # answers exist and exits 0, no matter what the pipeline is doing.
+    #
+    # This is the load-bearing guarantee against the `TIMEOUT` status, which scores
+    # zero even when most answers were already in hand. Everything below it (the
+    # deadline-aware retries, the bounded local phase) exists to make sure the
+    # watchdog rarely fires; the watchdog exists because "rarely" is not "never" —
+    # a llama.cpp prefill cannot be interrupted from Python, so no amount of
+    # in-pipeline bookkeeping can bound a hung generation.
+    #
+    # 510s leaves ~90s of margin under the 10-minute (600s) limit — for the
+    # container's own startup, which the grader's clock includes but ours doesn't,
+    # and for a grading box slower than the one we measured. The margin is close to
+    # free: a healthy 19-task run finishes in ~200s, so these budgets only bind when
+    # something has already gone wrong, and the failure they trade against (TIMEOUT,
+    # which scores zero) is far worse than the handful of answers a lower ceiling
+    # might cost.
+    hard_budget: int = 510
     # Reasoning effort for models that support it (e.g. gpt-oss). Lower effort
     # spends far fewer hidden "thinking" tokens — the main token-efficiency lever
     # when the allowed models reason by default. Empty string disables the param.
@@ -94,15 +118,28 @@ class Config:
     # so a slower CPU costs Fireworks tokens rather than a TIMEOUT (the failure
     # that scores zero). The phase now runs *concurrently* with the Fireworks
     # calls, so it no longer delays them.
-    local_budget: int = 300
+    # sized so that even a fully-spent local phase leaves the Fireworks phase far
+    # more room than it needs (a healthy Fireworks answer takes ~3s). At ~45s per
+    # task this answers ~3 tasks for free; the old 300s bought maybe 3 more at the
+    # cost of pushing every escalation into the back half of the container's life.
+    local_budget: int = 150
     # Backstop for a single local generation. Above the measured per-task cost so
     # it does not fire on healthy tasks: a truncated answer is escalated, which
     # means we pay the local time AND the Fireworks tokens — the worst outcome.
-    local_task_timeout: int = 60
+    local_task_timeout: int = 45
     # Output-token ceiling for local answers. The per-category caps are sized for
     # Fireworks (1024 for code); locally that is ~2 minutes of decode. 384 leaves
     # room for a full function or a summary without truncating.
     local_max_tokens: int = 384
+    # Prompt-size ceiling for local answering, in characters (~4 chars/token).
+    #
+    # Local cost is dominated by *prefill*, which scales with the prompt and which
+    # we cannot interrupt: llama.cpp yields no token — and so gives us no chance to
+    # check the clock — until the whole prompt has been evaluated. `local_task_timeout`
+    # therefore does not bound prefill, and a long summarization passage can blow
+    # through it unchecked. Bounding the input is the only bound that actually
+    # holds. Oversized prompts skip the local phase and go straight to Fireworks.
+    local_max_prompt_chars: int = 6000
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -117,11 +154,13 @@ class Config:
             or "/output/results.json",
             request_timeout=_env_int("REQUEST_TIMEOUT", 25),
             max_concurrency=max(1, _env_int("MAX_CONCURRENCY", 8)),
-            max_retries=max(0, _env_int("MAX_RETRIES", 2)),
-            time_budget=max(30, _env_int("TIME_BUDGET", 540)),
+            max_retries=max(0, _env_int("MAX_RETRIES", 1)),
+            time_budget=max(30, _env_int("TIME_BUDGET", 420)),
+            hard_budget=max(30, _env_int("HARD_TIME_BUDGET", 510)),
             reasoning_effort=os.environ.get("REASONING_EFFORT", "low").strip(),
             local_enabled=_env_bool("LOCAL_MODEL_ENABLED", True),
-            local_budget=max(0, _env_int("LOCAL_TIME_BUDGET", 300)),
-            local_task_timeout=max(1, _env_int("LOCAL_TASK_TIMEOUT", 60)),
+            local_budget=max(0, _env_int("LOCAL_TIME_BUDGET", 150)),
+            local_task_timeout=max(1, _env_int("LOCAL_TASK_TIMEOUT", 45)),
             local_max_tokens=max(1, _env_int("LOCAL_MAX_TOKENS", 384)),
+            local_max_prompt_chars=max(1, _env_int("LOCAL_MAX_PROMPT_CHARS", 6000)),
         )

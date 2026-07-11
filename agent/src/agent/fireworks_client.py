@@ -52,8 +52,26 @@ class TokenMeter:
             return self._total
 
 
+class DeadlineExceeded(RuntimeError):
+    """No time left in the container's budget to run (or retry) this call."""
+
+
+# Don't start an HTTP call we can't plausibly finish: a request that gets cut off
+# mid-flight burns wall clock and (worse) may still spend tokens on the proxy side
+# without returning us an answer.
+_MIN_REQUEST_WINDOW = 3.0
+
+
 class FireworksClient:
-    """Minimal chat-completion client with retries and token metering."""
+    """Minimal chat-completion client with retries and token metering.
+
+    Every call may carry a ``deadline`` (an absolute ``time.monotonic()`` value).
+    It bounds the *whole ladder* — each attempt's HTTP timeout is clamped to the
+    time actually left, and retries/backoffs stop once there isn't room for
+    another. Without it, ``max_retries`` and ``request_timeout`` multiply out to a
+    tail far longer than the caller thinks it authorised (2 tiers x 3 attempts x
+    25s = 150s for one task), which is how the container blew its 10-minute limit.
+    """
 
     def __init__(self, config: Config):
         self._config = config
@@ -76,6 +94,7 @@ class FireworksClient:
         user: str,
         max_tokens: int,
         temperature: float = 0.0,
+        deadline: float | None = None,
     ) -> str:
         """Run one chat completion and return the assistant text."""
         text, _ = self._run(
@@ -84,6 +103,7 @@ class FireworksClient:
             user=user,
             max_tokens=max_tokens,
             temperature=temperature,
+            deadline=deadline,
         )
         return text
 
@@ -95,6 +115,7 @@ class FireworksClient:
         user: str,
         max_tokens: int,
         temperature: float = 0.0,
+        deadline: float | None = None,
     ) -> tuple[str, Usage]:
         """Like :meth:`complete` but also returns this call's token usage.
 
@@ -106,6 +127,7 @@ class FireworksClient:
             user=user,
             max_tokens=max_tokens,
             temperature=temperature,
+            deadline=deadline,
         )
 
     def _run(
@@ -116,18 +138,25 @@ class FireworksClient:
         user: str,
         max_tokens: int,
         temperature: float,
+        deadline: float | None = None,
     ) -> tuple[str, Usage]:
         """Single completion with retries; returns (text, usage).
 
-        Raises the last exception if all attempts fail; callers decide how to
+        Raises the last exception if all attempts fail, or ``DeadlineExceeded`` if
+        the budget ran out before any attempt could be made; callers decide how to
         fall back. Token usage from successful calls is always metered.
         """
         last_exc: Exception | None = None
         attempts = self._config.max_retries + 1
 
         for attempt in range(attempts):
+            timeout = self._attempt_timeout(deadline)
+            if timeout is None:
+                break  # not enough budget left to try (again)
             try:
-                response = self._client.chat.completions.create(
+                response = self._client.with_options(
+                    timeout=timeout
+                ).chat.completions.create(
                     model=model,
                     messages=[
                         {"role": "system", "content": system},
@@ -148,11 +177,34 @@ class FireworksClient:
                     continue
                 last_exc = exc
                 if attempt < attempts - 1:
-                    # Exponential backoff: 0.5s, 1s, 2s, ... capped at 4s.
-                    time.sleep(min(0.5 * (2**attempt), 4.0))
+                    # Exponential backoff: 0.5s, 1s, 2s, ... capped at 4s — but
+                    # never sleep away time the next attempt would need.
+                    backoff = min(0.5 * (2**attempt), 4.0)
+                    if not self._can_wait(deadline, backoff):
+                        break
+                    time.sleep(backoff)
 
-        assert last_exc is not None
-        raise last_exc
+        if last_exc is not None:
+            raise last_exc
+        raise DeadlineExceeded(
+            f"No time left in the run budget to call {model!r}."
+        )
+
+    def _attempt_timeout(self, deadline: float | None) -> float | None:
+        """HTTP timeout for the next attempt, or None if there's no time for one."""
+        if deadline is None:
+            return float(self._config.request_timeout)
+        remaining = deadline - time.monotonic()
+        if remaining < _MIN_REQUEST_WINDOW:
+            return None
+        return min(float(self._config.request_timeout), remaining)
+
+    @staticmethod
+    def _can_wait(deadline: float | None, backoff: float) -> bool:
+        """True if sleeping ``backoff`` still leaves room for another attempt."""
+        if deadline is None:
+            return True
+        return (deadline - time.monotonic()) - backoff >= _MIN_REQUEST_WINDOW
 
     def _reasoning_kwargs(self, model: str) -> dict:
         effort = self._config.reasoning_effort

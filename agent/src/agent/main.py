@@ -3,6 +3,18 @@
 Flow: load config from env -> read /input/tasks.json -> run the pipeline ->
 write /output/results.json atomically -> log token usage -> exit 0. Any fatal
 error is logged and the process exits non-zero, as the rules require.
+
+A **watchdog** guards the whole run. The grader kills the container at 10 minutes
+and reports ``TIMEOUT``, which scores zero — even if every answer was already
+computed and we simply never got to write the file. That failure is unacceptable
+and, worse, not fully preventable from inside the pipeline: a llama.cpp prefill
+runs in C and cannot be interrupted from Python, so no amount of deadline
+bookkeeping can *guarantee* a generation returns. So we don't rely on the pipeline
+finishing. At ``hard_budget`` the watchdog writes whatever answers exist and exits
+0 from under the running threads.
+
+A partial results file always beats a missing one: unanswered tasks are simply
+graded wrong, whereas ``TIMEOUT`` throws away the answers we did get.
 """
 
 from __future__ import annotations
@@ -12,13 +24,14 @@ import logging
 import os
 import sys
 import tempfile
+import threading
 import time
 
 from .config import Config, ConfigError
 from .fireworks_client import FireworksClient
-from .local_model import LocalModel, LocalModelError
+from .local_model import LocalModel
 from .model_selector import ModelSelector
-from .pipeline import Pipeline, normalize_tasks
+from .pipeline import Pipeline, Task, normalize_tasks
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +46,14 @@ def _init_local_model(config: Config) -> LocalModel | None:
     Fireworks-only. Loading eagerly here (a) surfaces load errors before task
     processing and (b) keeps the first task's latency clean. Any failure —
     disabled, weights absent, or load error — degrades gracefully to the API.
+
+    "Any failure" is meant literally, hence the broad except. Loading a GGUF drops
+    into C: an ISA the grading CPU doesn't implement raises ``OSError``
+    (0xc000001d / SIGILL), and 1.9 GB of weights on a 4 GB box can raise
+    ``MemoryError``. Neither is a ``LocalModelError``, so both used to escape this
+    function and kill the container with a traceback — exit non-zero,
+    ``RUNTIME_ERROR``, scored zero. The local model is an *optimisation*; nothing
+    about it is worth failing the run for, since Fireworks alone answers every task.
     """
     if not config.local_enabled:
         logger.info("Local model disabled by config; using Fireworks only.")
@@ -46,11 +67,53 @@ def _init_local_model(config: Config) -> LocalModel | None:
         return None
     try:
         candidate.load()
-    except LocalModelError as exc:
-        logger.warning("Local model failed to load (%s); using Fireworks only.", exc)
+    except Exception as exc:  # noqa: BLE001 - see docstring
+        logger.warning("Local model failed to load (%r); using Fireworks only.", exc)
         return None
     logger.info("Local model ready: %s", candidate.model_path)
     return candidate
+
+
+def _start_watchdog(
+    config: Config, started_at: float, pipeline: Pipeline, tasks: list[Task]
+) -> None:
+    """Write results and exit 0 at ``hard_budget``, whatever the pipeline is doing.
+
+    Runs as a daemon thread so it never keeps the process alive on the happy path.
+    When it fires it calls ``os._exit``, which is deliberate: a clean shutdown would
+    join the worker threads, and a thread stuck inside llama.cpp's C code will not
+    join — that is precisely the hang we are escaping. The results file is written
+    atomically (``os.replace``) before we exit, so cutting the process down mid-flight
+    cannot corrupt or truncate it.
+    """
+    deadline = started_at + config.hard_budget
+
+    def _fire() -> None:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(remaining, 1.0))
+
+        results = pipeline.results_for(tasks)
+        answered = sum(1 for r in results if r["answer"])
+        logger.error(
+            "Hard time budget (%ds) reached; writing %d/%d answered task(s) and exiting.",
+            config.hard_budget,
+            answered,
+            len(results),
+        )
+        try:
+            _write_results(config.output_path, results)
+        except OSError as exc:
+            logger.error("Watchdog could not write results to %s: %s", config.output_path, exc)
+            sys.stderr.flush()
+            os._exit(1)
+        sys.stderr.flush()
+        os._exit(0)
+
+    threading.Thread(target=_fire, name="watchdog", daemon=True).start()
+    logger.info("Watchdog armed: results will be written by T+%ds.", config.hard_budget)
 
 
 def _read_tasks(path: str) -> list[dict]:
@@ -102,17 +165,23 @@ def main() -> int:
     logger.info("Loaded %d task(s)", len(tasks))
 
     client = FireworksClient(config)
-    local = _init_local_model(config)
-    # started=process start: the model load above is part of the container's
+    # started=process start: the model load below is part of the container's
     # wall-clock budget, so the deadline has to count it.
-    pipeline = Pipeline(config, client, selector, local=local, started_at=start)
+    pipeline = Pipeline(config, client, selector, local=None, started_at=start)
+
+    # Armed before the model loads, so that even a stalled load ends in a written
+    # results file rather than a TIMEOUT.
+    _start_watchdog(config, start, pipeline, tasks)
+    pipeline.attach_local(_init_local_model(config))
 
     try:
         results = pipeline.run(tasks)
     except Exception as exc:  # noqa: BLE001 - never crash before writing output
         logger.exception("Pipeline error: %s", exc)
-        # Still emit a valid, complete results file with empty answers.
-        results = [{"task_id": t.task_id, "answer": ""} for t in tasks]
+        # Salvage whatever the pipeline had answered before it broke, rather than
+        # discarding it: a wrong answer and a missing one score the same, so
+        # anything we already hold is free upside.
+        results = pipeline.results_for(tasks)
 
     try:
         _write_results(config.output_path, results)

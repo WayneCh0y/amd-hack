@@ -56,6 +56,8 @@ From the updated participant guide. These are *distinct* failures — knowing wh
 `flagged: ZERO_API_CALLS` alongside a result is **not a failure** — it's the valid local-only strategy.
 
 > **We hit `ACCURACY_GATE_FAILED` once (2026-07-11).** It's worth internalising what that status rules *out*: the image pulled, the container exited 0, the JSON schema was valid, the models were legal, and it finished in time. Every piece of plumbing was correct. The answers were simply wrong — which pointed straight at the local model, not at the routing, the output format, or the API client. See [architecture-1.md](architecture-1.md) for the post-mortem.
+>
+> **Then we hit `TIMEOUT` (checked 2026-07-12)** — the fix for the above added an unbounded wait. Note the asymmetry: `ACCURACY_GATE_FAILED` at least *produced answers*; `TIMEOUT` throws away every answer the container computed, because it never wrote the file. So the container must **always** write `results.json` and exit 0, even mid-work — a partial file scores whatever it scores, a missing one scores zero. That is now enforced by a watchdog that force-writes and exits at T+510 s. See [architecture-1.md](architecture-1.md).
 
 ## Practice tasks (not the real grading set)
 

@@ -45,9 +45,10 @@ class FakeClient:
         self._lock = threading.Lock()
 
     def complete(self, *, model: str, system: str, user: str,
-                 max_tokens: int, temperature: float = 0.0) -> str:
+                 max_tokens: int, temperature: float = 0.0,
+                 deadline: float | None = None) -> str:
         with self._lock:
-            self.calls.append({"model": model, "user": user})
+            self.calls.append({"model": model, "user": user, "deadline": deadline})
             queue = self._responses.get(model, [])
             if not queue:
                 # No scripted answer for this model → default to empty (mimics
@@ -73,13 +74,16 @@ class FakeLocal:
         self.calls: list[str] = []
         self.max_tokens: list[int] = []
         self.timeouts: list[float | None] = []
+        self.deadlines: list[float | None] = []
 
     def complete_with_usage(self, *, system: str, user: str, max_tokens: int,
                             temperature: float = 0.0,
-                            timeout: float | None = None) -> tuple[str, LocalUsage]:
+                            timeout: float | None = None,
+                            deadline: float | None = None) -> tuple[str, LocalUsage]:
         self.calls.append(user)
         self.max_tokens.append(max_tokens)
         self.timeouts.append(timeout)
+        self.deadlines.append(deadline)
         if self._sleep:
             time.sleep(self._sleep)
         if isinstance(self._answer, Exception):
@@ -379,6 +383,102 @@ def test_last_resort_local_answer_when_fireworks_is_dead():
 
     assert results == [{"task_id": "f", "answer": "Canberra."}]
     assert len(local.calls) == 1  # not asked during the local phase, only as rescue
+
+
+def test_fireworks_calls_carry_the_run_deadline():
+    # The deadline has to reach the client, which clamps each attempt's HTTP
+    # timeout to the time actually left. Checking the clock only *before* the call
+    # lets one task burn 2 tiers x N attempts x request_timeout past the budget —
+    # the tail that ran the container past 10 minutes.
+    client = FakeClient({SMALL_MODEL: ["Paris"]})
+    pipeline = _pipeline(client, time_budget=60)
+
+    pipeline.run([Task(task_id="cap", prompt="Capital of France?")])
+
+    assert client.calls[0]["deadline"] is not None
+
+
+def test_local_calls_carry_a_deadline_not_just_a_timeout():
+    # `timeout` starts counting when a generation begins decoding, so it does not
+    # bound the time spent *queued* behind another generation on the single
+    # llama.cpp context. Only an absolute deadline does.
+    client = FakeClient({LARGE_MODEL: ["x"]})
+    local = FakeLocal(GOOD_CODE)
+    pipeline = _pipeline(client, local=local)
+
+    pipeline.run([Task(task_id="c", prompt=CODE_PROMPT)])
+
+    assert local.deadlines and local.deadlines[0] is not None
+
+
+def test_oversized_prompts_skip_the_local_model():
+    # Local cost is dominated by prefill, which cannot be interrupted — no token is
+    # yielded until the whole prompt is evaluated, so `local_task_timeout` cannot
+    # bound it. Capping the input is the only bound that holds.
+    client = FakeClient({SMALL_MODEL: ["short summary"], LARGE_MODEL: ["short summary"]})
+    local = FakeLocal(GOOD_SUMMARY)
+    huge = SUMMARY_PROMPT + " padding" * 5000
+    pipeline = _pipeline(client, local=local, local_max_prompt_chars=500)
+
+    results = pipeline.run([Task(task_id="s", prompt=huge)])
+
+    assert results == [{"task_id": "s", "answer": "short summary"}]
+    assert local.calls == []  # never asked to prefill it
+    assert len(client.calls) >= 1
+
+
+def test_last_resort_local_is_skipped_for_oversized_prompts():
+    # The rescue path must respect the same prefill bound; otherwise a dead API
+    # sends every long prompt into an uninterruptible local generation.
+    client = FakeClient({SMALL_MODEL: [RuntimeError("down")], LARGE_MODEL: [RuntimeError("down")]})
+    local = FakeLocal("some answer")
+    huge = "What is the capital of Australia? " + "context " * 3000
+    pipeline = _pipeline(client, local=local, local_max_prompt_chars=500, time_budget=600)
+
+    results = pipeline.run([Task(task_id="f", prompt=huge)])
+
+    assert results == [{"task_id": "f", "answer": ""}]
+    assert local.calls == []
+
+
+def test_partial_results_are_readable_mid_run():
+    # What the watchdog writes when the clock runs out. It must always be a
+    # complete, schema-valid file — one entry per task, answered or not — because a
+    # partial file scores whatever it scores while a missing one scores zero.
+    client = FakeClient({SMALL_MODEL: ["Paris"]})
+    pipeline = _pipeline(client)
+
+    tasks = [
+        Task(task_id="t1", prompt="Capital of France?"),
+        Task(task_id="t2", prompt="Capital of Italy?"),
+    ]
+    # Before run(): nothing answered, but the shape is already right.
+    assert pipeline.results_for(tasks) == [
+        {"task_id": "t1", "answer": ""},
+        {"task_id": "t2", "answer": ""},
+    ]
+
+    pipeline.run(tasks)
+
+    after = pipeline.results_for(tasks)
+    assert [r["task_id"] for r in after] == ["t1", "t2"]
+    assert after[0]["answer"] == "Paris"
+
+
+def test_local_failure_escalates_without_waiting_for_the_whole_phase():
+    # Escalations used to be banked until the entire local phase finished, which
+    # stacked the Fireworks tail into the back half of the run. Each failure should
+    # be in flight before the next local task is attempted.
+    client = FakeClient({LARGE_MODEL: ["from fireworks"] * 3})
+    local = FakeLocal("prose, not code")  # fails the verifier → escalate
+    pipeline = _pipeline(client, local=local, max_concurrency=4)
+
+    tasks = [Task(task_id=f"c{i}", prompt=CODE_PROMPT) for i in range(3)]
+    results = pipeline.run(tasks)
+
+    assert [r["answer"] for r in results] == ["from fireworks"] * 3
+    assert len(local.calls) == 3
+    assert len(client.calls) == 3
 
 
 @pytest.mark.parametrize("raw,expected_id,expected_prompt", [

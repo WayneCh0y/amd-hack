@@ -115,6 +115,57 @@ Guide's 8 practice tasks, in-container, `--cpus=2 --memory=4g` (the grading box'
 The verified subset answers summarization + both code tasks locally at **zero tokens**, all three
 passing verification, and routes the other five to Fireworks.
 
+## Every wait is bounded, and a watchdog guarantees output
+
+> **The submission after the accuracy fix returned `TIMEOUT`** (2026-07-12) — didn't finish in
+> 10 minutes, scored zero. Both failures so far trace to the local model, in opposite ways: the
+> first trusted it too much, the second let it run too long.
+
+The bug, stated generally: **the run had a budget, but not a deadline.** `time_budget` was checked
+*before* dispatching a task and never again, so anything already in flight ran unbounded.
+
+1. **The regression.** `_last_resort_local` (added by the accuracy fix) checked the clock, then
+   queued on `LocalModel._gen_lock` — an unbounded `with self._gen_lock:`. Local generations
+   serialize on one llama.cpp context at ~45 s each, so a degraded API sends *every* task down
+   this path and they stack behind the lock, with nothing re-checking the clock after the wait.
+   `ThreadPoolExecutor.__exit__` waits for all of them.
+2. **A deadline-blind retry ladder.** 2 tiers × 3 attempts × 25 s = **150 s for one task**, and a
+   task could start at t=539 s against a 540 s budget. "Excessive retries" is exactly what the
+   guide lists under `TIMEOUT`.
+3. **`local_task_timeout` never bounded prefill.** It checks the clock *between streamed tokens*,
+   but llama.cpp yields nothing until the whole prompt is evaluated — and prefill dominates on
+   2 vCPU. **Prefill cannot be interrupted from Python at all.**
+4. **Escalations were banked** until the whole local phase finished, stacking the Fireworks tail
+   into the back half of the container's life.
+
+The fix, in layers — the last one is the only actual *guarantee*:
+
+- **Deadlines are enforced inside every wait**, not just before it. The Fireworks client clamps
+  each attempt's HTTP timeout to the time left and stops retrying when there is none; `LocalModel`
+  acquires its lock *with a timeout* and re-checks the deadline once it holds it.
+- **Bound the input, since prefill can't be bounded.** `local_max_prompt_chars` keeps oversized
+  prompts out of the local phase entirely.
+- **Escalate on the spot**, so Fireworks work overlaps the remaining local work.
+- **A watchdog writes results and force-exits.** Because of (3), no amount of bookkeeping can
+  *guarantee* a generation returns — so we stop relying on the pipeline finishing. A daemon thread
+  armed before the model load fires at `hard_budget` (510 s), writes whatever answers exist, and
+  `os._exit(0)`s from under the running threads. (`os._exit` is deliberate: a clean shutdown joins
+  workers, and a thread stuck in C will not join.)
+
+**A partial results file always beats a missing one.** Unanswered tasks merely grade wrong;
+`TIMEOUT` throws away the answers we *did* compute.
+
+Budgets: `time_budget` 540 → **420** (soft), `hard_budget` **510**, `local_budget` 300 → **150**,
+`max_retries` 2 → **1**, `local_task_timeout` 60 → **45**. For 19 tasks: healthy ≈ 200 s; a dead
+API terminates at the 420 s soft deadline; watchdog backstop at 510 s; ~90 s of margin under the
+600 s kill.
+
+**A load crash no longer kills the container, either.** `_init_local_model` caught only
+`LocalModelError`, but loading a GGUF drops into C: a bad ISA raises `OSError` (SIGILL) and 1.9 GB
+on a 4 GB box can raise `MemoryError`. Both escaped and exited non-zero (`RUNTIME_ERROR`). It now
+catches everything and degrades to Fireworks-only. **The local model is an optimisation; nothing
+about it is worth failing the run for.**
+
 ## Never ship an empty answer
 
 `_FALLBACK_ANSWER = ""` used to be the response to any failure. An empty answer is graded **wrong
@@ -149,3 +200,10 @@ gate scores zero, and that is precisely the trade the original local-first desig
 300 s of CPU to *lower* the submission's accuracy. Local inference is only free if the answer is
 right, so the local model may only be trusted where being wrong is *detectable*. Everywhere else,
 paying tokens is the cheap option.
+
+And the second lesson, learned the same way: **a budget you only check before starting work is not
+a budget.** Every blocking wait — a lock, an HTTP call, a subprocess — needs the deadline passed
+*into* it. When a dependency cannot be interrupted at all (C extensions; llama.cpp prefill), the
+only honest answer is an out-of-band watchdog that writes the output and force-exits. Both of the
+local model's failure modes cost a whole submission; both were bounded by treating it as an
+optimisation that must never be able to take the run down with it.
