@@ -216,69 +216,104 @@ def test_results_preserve_input_order_with_concurrency():
     assert [r["task_id"] for r in results] == ["t1", "t2", "t3"]
 
 
+# Prompts that classify into the three local-eligible categories, and a local
+# answer that survives the (now real) verifier: this code parses and runs.
+CODE_PROMPT = "Write a Python function that reverses a string."
+GOOD_CODE = "```python\ndef reverse(s):\n    return s[::-1]\n```"
+SUMMARY_PROMPT = (
+    "Summarise the following text in one sentence: Water boils at one hundred "
+    "degrees Celsius at sea level, and freezes at zero degrees."
+)
+GOOD_SUMMARY = "Water boils at 100C and freezes at 0C at sea level."
+
+
 def test_trusted_local_answer_skips_fireworks():
-    # A well-formed local answer that passes verification is used as-is; the
-    # Fireworks client must never be called (zero tokens).
+    # A verified local answer (the code parses and executes) is used as-is; the
+    # Fireworks client must never be called — that is the whole point, zero tokens.
     client = FakeClient({SMALL_MODEL: ["should not be used"]})
-    local = FakeLocal("Answer: 42")
+    local = FakeLocal(GOOD_CODE)
     pipeline = _pipeline(client, local=local)
 
-    results = pipeline.run([Task(task_id="m", prompt="What is 6 times 7?")])
+    results = pipeline.run([Task(task_id="c", prompt=CODE_PROMPT)])
 
-    assert results == [{"task_id": "m", "answer": "Answer: 42"}]
-    assert local.calls == ["What is 6 times 7?"]
+    assert results == [{"task_id": "c", "answer": GOOD_CODE}]
+    assert local.calls == [CODE_PROMPT]
     assert client.calls == []  # no escalation
 
 
-def test_untrustworthy_local_answer_escalates():
-    # A math answer with no number fails verification → escalate to Fireworks.
-    # "Calculate ..." routes to MATH, whose verifier requires a number.
-    client = FakeClient({SMALL_MODEL: ["36"], LARGE_MODEL: ["36"]})
-    local = FakeLocal("I think it is quite large.")
+@pytest.mark.parametrize(
+    "category,prompt",
+    [
+        ("factual", "What is the capital of Australia, and what body of water is it near?"),
+        ("math", "A store has 240 items. It sells 15% on Monday. How many remain?"),
+        ("sentiment", "Classify the sentiment of this review: the battery is great."),
+        ("ner", "Extract the named entities from: Maria joined Fireworks AI in Berlin."),
+        ("logic", "Sam, Jo and Lee each own a different pet. Jo owns the dog. Who owns the cat?"),
+    ],
+)
+def test_unverifiable_categories_never_touch_the_local_model(category, prompt):
+    # The accuracy fix. These categories have no sound ground-truth-free verifier,
+    # and the local model is fluently wrong on them, so it must not even be asked:
+    # a local answer here would be kept on the strength of a shape check alone.
+    client = FakeClient({SMALL_MODEL: ["from fireworks"], LARGE_MODEL: ["from fireworks"]})
+    local = FakeLocal("a confident, well-formed, wrong answer")
     pipeline = _pipeline(client, local=local)
 
-    results = pipeline.run([Task(task_id="m", prompt="Calculate 15% of 240.")])
+    results = pipeline.run([Task(task_id=category, prompt=prompt)])
 
-    assert results == [{"task_id": "m", "answer": "36"}]
+    assert results == [{"task_id": category, "answer": "from fireworks"}]
+    assert local.calls == []
+    assert len(client.calls) >= 1
+
+
+def test_untrustworthy_local_answer_escalates():
+    # Prose instead of code fails the verifier → escalate to Fireworks.
+    client = FakeClient({LARGE_MODEL: ["def reverse(s): return s[::-1]"]})
+    local = FakeLocal("You should use slicing with a negative step.")
+    pipeline = _pipeline(client, local=local)
+
+    results = pipeline.run([Task(task_id="c", prompt=CODE_PROMPT)])
+
+    assert results == [{"task_id": "c", "answer": "def reverse(s): return s[::-1]"}]
     assert len(local.calls) == 1
     assert len(client.calls) >= 1  # escalated
 
 
 def test_local_exception_escalates():
-    client = FakeClient({SMALL_MODEL: ["fallback answer"]})
+    client = FakeClient({LARGE_MODEL: ["fallback answer"]})
     local = FakeLocal(RuntimeError("model blew up"))
     pipeline = _pipeline(client, local=local)
 
-    results = pipeline.run([Task(task_id="q", prompt="Capital of France?")])
+    results = pipeline.run([Task(task_id="c", prompt=CODE_PROMPT)])
 
-    assert results == [{"task_id": "q", "answer": "fallback answer"}]
+    assert results == [{"task_id": "c", "answer": "fallback answer"}]
 
 
 @pytest.mark.parametrize("reason", ["length", "timeout"])
 def test_truncated_local_answer_escalates(reason):
-    # A truncated answer is a fragment: this one would sail through the MATH
-    # verifier (it contains a number) but the derivation was cut off mid-way, so
-    # trusting it would silently ship a wrong answer. Truncation must escalate
-    # regardless of how well-formed the fragment looks.
-    client = FakeClient({SMALL_MODEL: ["36"], LARGE_MODEL: ["36"]})
-    local = FakeLocal("First, 10% of 240 is 24, so 5% is 12", finish_reason=reason)
+    # A truncated answer is a fragment. This one would sail through the verifier
+    # (it parses, it defines a function) but the body was cut off mid-way, so
+    # trusting it would silently ship broken code. Truncation escalates before we
+    # even look at the content.
+    client = FakeClient({LARGE_MODEL: ["complete code"]})
+    local = FakeLocal(GOOD_CODE, finish_reason=reason)
     pipeline = _pipeline(client, local=local)
 
-    results = pipeline.run([Task(task_id="m", prompt="Calculate 15% of 240.")])
+    results = pipeline.run([Task(task_id="c", prompt=CODE_PROMPT)])
 
-    assert results == [{"task_id": "m", "answer": "36"}]
-    assert len(client.calls) >= 1  # escalated despite passing _has_number
+    assert results == [{"task_id": "c", "answer": "complete code"}]
+    assert len(client.calls) >= 1  # escalated despite parsing cleanly
 
 
 def test_local_calls_are_bounded_by_config():
-    # The per-category cap is sized for Fireworks (1024 for math); locally that
-    # is minutes of CPU decoding, so it must be clamped to local_max_tokens and
-    # carry a wall-clock timeout.
-    client = FakeClient({LARGE_MODEL: ["42"]})
-    local = FakeLocal("Answer: 42")
+    # The per-category cap is sized for Fireworks (1024 for code); locally that is
+    # minutes of CPU decoding, so it must be clamped to local_max_tokens and carry
+    # a wall-clock timeout.
+    client = FakeClient({LARGE_MODEL: ["x"]})
+    local = FakeLocal(GOOD_CODE)
     pipeline = _pipeline(client, local=local, local_max_tokens=64, local_task_timeout=9)
 
-    pipeline.run([Task(task_id="m", prompt="Calculate 15% of 240.")])
+    pipeline.run([Task(task_id="c", prompt=CODE_PROMPT)])
 
     assert local.max_tokens == [64]
     assert local.timeouts == [9.0]
@@ -288,11 +323,11 @@ def test_local_budget_exhaustion_escalates_the_rest():
     # The local phase is serialized, so its cost is the SUM over tasks. Once the
     # budget is spent the remaining tasks must go straight to Fireworks rather
     # than run the container past its hard limit.
-    client = FakeClient({SMALL_MODEL: ["from fireworks"] * 5})
-    local = FakeLocal("Paris", sleep=0.05)
+    client = FakeClient({LARGE_MODEL: ["from fireworks"] * 5})
+    local = FakeLocal(GOOD_CODE, sleep=0.05)
     pipeline = _pipeline(client, local=local, local_budget=1, local_task_timeout=1)
 
-    tasks = [Task(task_id=f"t{i}", prompt=f"Capital of country {i}?") for i in range(5)]
+    tasks = [Task(task_id=f"t{i}", prompt=CODE_PROMPT) for i in range(5)]
     # Budget is 1s and the phase stops with <=1s left, so no local call fits.
     results = pipeline.run(tasks)
 
@@ -302,21 +337,48 @@ def test_local_budget_exhaustion_escalates_the_rest():
 
 
 def test_local_phase_runs_cheapest_tasks_first():
-    # Ordering by token cap fits the most tasks into a fixed budget, which is
-    # what maximises the Fireworks tokens saved.
+    # Ordering by token cap fits the most tasks into a fixed budget, which is what
+    # maximises the Fireworks tokens saved.
     client = FakeClient({})
-    local = FakeLocal("positive")
+    local = FakeLocal(GOOD_SUMMARY)
     pipeline = _pipeline(client, local=local)
 
     tasks = [
-        Task(task_id="math", prompt="Calculate 15% of 240."),          # cap 1024
-        Task(task_id="sent", prompt="What is the sentiment of: great!"),  # cap 256
+        Task(task_id="code", prompt=CODE_PROMPT),        # cap 1024
+        Task(task_id="sum", prompt=SUMMARY_PROMPT),      # cap 512
     ]
     pipeline.run(tasks)
 
-    # Sentiment (cheapest) is attempted before math, despite input order.
-    assert local.calls[0].startswith("What is the sentiment")
-    assert len(client.calls) >= 1
+    # Summarization (cheapest) is attempted before code generation, despite input
+    # order.
+    assert local.calls[0] == SUMMARY_PROMPT
+
+
+def test_empty_fireworks_answer_falls_back_to_the_local_draft():
+    # An empty answer is graded wrong with certainty; an unverified local draft is
+    # only *likely* wrong. When Fireworks gives us nothing, the draft we already
+    # paid for (zero tokens) is strictly the better thing to ship.
+    client = FakeClient({SMALL_MODEL: [RuntimeError("down")], LARGE_MODEL: [RuntimeError("down")]})
+    draft = "You should use slicing."  # fails the code verifier → escalates
+    local = FakeLocal(draft)
+    pipeline = _pipeline(client, local=local)
+
+    results = pipeline.run([Task(task_id="c", prompt=CODE_PROMPT)])
+
+    assert results == [{"task_id": "c", "answer": draft}]
+
+
+def test_last_resort_local_answer_when_fireworks_is_dead():
+    # A category that never goes local, with a dead API: rather than ship "", make
+    # one unverified local attempt. Weak answers beat guaranteed-wrong empties.
+    client = FakeClient({SMALL_MODEL: [RuntimeError("down")], LARGE_MODEL: [RuntimeError("down")]})
+    local = FakeLocal("Canberra.")
+    pipeline = _pipeline(client, local=local, time_budget=600)
+
+    results = pipeline.run([Task(task_id="f", prompt="What is the capital of Australia?")])
+
+    assert results == [{"task_id": "f", "answer": "Canberra."}]
+    assert len(local.calls) == 1  # not asked during the local phase, only as rescue
 
 
 @pytest.mark.parametrize("raw,expected_id,expected_prompt", [

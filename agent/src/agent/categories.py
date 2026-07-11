@@ -34,7 +34,37 @@ class CategoryPolicy:
     tier: Tier
     max_tokens: int
     temperature: float = 0.0
+    # May the bundled local model answer this category at all? See LOCAL_OK below:
+    # this is the accuracy gate's load-bearing switch, not a token optimisation.
+    local_ok: bool = False
 
+
+# Which categories the local model is allowed to answer.
+#
+# This list is empirical, and the earlier "try everything locally" default is what
+# failed the 80% accuracy gate. Measured on the participant guide's own practice
+# tasks (2 vCPU / 4 GB, Qwen2.5-3B Q4), the local model scored 4/8. It was wrong in
+# exactly the ways a local verifier cannot catch:
+#
+#   * factual   — "Canberra is near the Australian Alps" (a mountain range, asked
+#                 for a body of water). Fluent, well-formed, wrong.
+#   * math      — invented a step ("Tuesday sells 36 + 60 = 96"), answered 108
+#                 where the answer is 144. Passed the old `_has_number` check.
+#   * sentiment — bare "Negative" on a mixed review, no justification. Passed the
+#                 old `_has_label` check.
+#   * ner       — exceeded the 45 s local timeout and produced nothing.
+#
+# There is no cheap, sound way to detect a confidently-wrong-but-well-formed
+# answer without ground truth, and the evaluation prompts are unseen. So rather
+# than pretend to verify those categories, we simply don't answer them locally.
+#
+# The three categories below stay local because they scored 100% AND they are the
+# only ones where a verifier can check something real (see verifiers.py): code can
+# be parsed and executed, and a summary can be checked against the length/format
+# constraint the prompt states and against the source text.
+LOCAL_OK: frozenset[Category] = frozenset(
+    {Category.CODE_GEN, Category.CODE_DEBUG, Category.SUMMARIZATION}
+)
 
 # Simple, short-answer tasks go to the cheap model with tight caps. Tasks that
 # need multi-step correctness (math, logic, code) go to the capable model with
@@ -46,7 +76,7 @@ class CategoryPolicy:
 # truncate the answer to empty (observed with a 48-token sentiment cap). We keep
 # generous floors so an answer always survives; `reasoning_effort=low` (see
 # config/client) is what actually keeps token spend down.
-POLICIES: dict[Category, CategoryPolicy] = {
+_BASE_POLICIES: dict[Category, CategoryPolicy] = {
     Category.SENTIMENT: CategoryPolicy(Tier.SMALL, max_tokens=256),
     Category.NER: CategoryPolicy(Tier.SMALL, max_tokens=512),
     Category.FACTUAL: CategoryPolicy(Tier.SMALL, max_tokens=512),
@@ -57,8 +87,19 @@ POLICIES: dict[Category, CategoryPolicy] = {
     Category.CODE_GEN: CategoryPolicy(Tier.LARGE, max_tokens=1024),
 }
 
-# Fallback used if a category is somehow missing from POLICIES.
-DEFAULT_POLICY = CategoryPolicy(Tier.LARGE, max_tokens=512)
+POLICIES: dict[Category, CategoryPolicy] = {
+    category: CategoryPolicy(
+        tier=policy.tier,
+        max_tokens=policy.max_tokens,
+        temperature=policy.temperature,
+        local_ok=category in LOCAL_OK,
+    )
+    for category, policy in _BASE_POLICIES.items()
+}
+
+# Fallback used if a category is somehow missing from POLICIES. Never local: an
+# unknown category is exactly the case we have no verifier for.
+DEFAULT_POLICY = CategoryPolicy(Tier.LARGE, max_tokens=512, local_ok=False)
 
 
 def policy_for(category: Category) -> CategoryPolicy:

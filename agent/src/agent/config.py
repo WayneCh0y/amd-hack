@@ -79,32 +79,29 @@ class Config:
     # If a model rejects it, the client transparently retries without it.
     reasoning_effort: str = "low"
 
-    # Local-first strategy: answer with the bundled local model first (zero
-    # Fireworks tokens) and escalate to the API only when the answer fails
-    # verification. Auto-disabled at startup if the weights aren't present, so
-    # the agent degrades gracefully to Fireworks-only.
+    # Local answering (zero Fireworks tokens), restricted to the categories that
+    # have a real verifier — code and summarization; see categories.LOCAL_OK.
+    # Auto-disabled at startup if the weights aren't present, so the agent
+    # degrades gracefully to Fireworks-only.
     local_enabled: bool = True
-    # Wall-clock ceiling for the whole local phase, and the load-bearing safety
-    # property of this agent. Local generation is serialized (one llama.cpp
-    # context), so the phase costs the SUM over tasks, not the max. Measured on a
-    # 2-vCPU box, each task costs a fixed ~15s of prompt prefill (compute-bound;
-    # it is paid even for a one-word answer) plus ~0.12s per generated token, so
-    # all 19 sample tasks run to ~416s locally. That fits 600s — but only just,
-    # and only on the hardware we measured.
+    # Wall-clock ceiling for the whole local phase. Local generation is serialized
+    # (one llama.cpp context), so the phase costs the SUM over tasks, not the max.
+    # Measured on 2 vCPU / 4 GB — the grading box's shape — a task costs ~45s,
+    # dominated by prompt prefill rather than by answer length.
     #
-    # The budget makes that safe without having to predict the grading box: we
-    # answer as many tasks locally as it allows and escalate the rest, so a
-    # slower CPU costs Fireworks tokens rather than a TIMEOUT (the failure that
-    # scores zero). Do not raise it to chase a better token rank.
+    # The budget makes that safe without having to predict the grading hardware:
+    # we answer as many eligible tasks locally as it allows and escalate the rest,
+    # so a slower CPU costs Fireworks tokens rather than a TIMEOUT (the failure
+    # that scores zero). The phase now runs *concurrently* with the Fireworks
+    # calls, so it no longer delays them.
     local_budget: int = 300
-    # Backstop for a single local generation. Sized above the measured worst case
-    # (~33s) so it does not fire on healthy tasks: cutting a generation off
-    # mid-prefill throws away the prefill and buys nothing.
-    local_task_timeout: int = 45
+    # Backstop for a single local generation. Above the measured per-task cost so
+    # it does not fire on healthy tasks: a truncated answer is escalated, which
+    # means we pay the local time AND the Fireworks tokens — the worst outcome.
+    local_task_timeout: int = 60
     # Output-token ceiling for local answers. The per-category caps are sized for
-    # Fireworks (1024 for math/code); locally that is ~2 minutes of decode. At 384
-    # nothing in the sample set truncates (worst observed: 165 tokens) while the
-    # worst case stays bounded at ~46s of decode.
+    # Fireworks (1024 for code); locally that is ~2 minutes of decode. 384 leaves
+    # room for a full function or a summary without truncating.
     local_max_tokens: int = 384
 
     @classmethod
@@ -125,6 +122,6 @@ class Config:
             reasoning_effort=os.environ.get("REASONING_EFFORT", "low").strip(),
             local_enabled=_env_bool("LOCAL_MODEL_ENABLED", True),
             local_budget=max(0, _env_int("LOCAL_TIME_BUDGET", 300)),
-            local_task_timeout=max(1, _env_int("LOCAL_TASK_TIMEOUT", 45)),
+            local_task_timeout=max(1, _env_int("LOCAL_TASK_TIMEOUT", 60)),
             local_max_tokens=max(1, _env_int("LOCAL_MAX_TOKENS", 384)),
         )

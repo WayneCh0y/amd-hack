@@ -32,63 +32,107 @@ every task we can answer locally *and verify* is free — the whole design optim
    hard categories to Fireworks (wasted tokens) and keep hard instances of easy categories local
    (wrong answers).
 
-3. **Escalate on verification/confidence, not on category.** Wherever an answer can be checked
-   locally at zero cost, the local model tries first and we escalate to Fireworks only on failure:
-   - **math** → parse the numeric result, recompute / sanity-check → escalate if it doesn't hold
-   - **code generation / debugging** → execute against a couple of asserts → escalate on
-     throw/fail
-   - **sentiment / NER** → validate output format and label/entity-type set → escalate if
-     malformed
-   - **factual / summarization / logic** → confidence / self-consistency heuristic (no cheap
-     ground-truth check), or default per the benchmark map below
-   This "try local → verify → escalate on fail" captures the easy instances of *every* category
-   for free and spends Fireworks tokens only where the local model actually falls short.
+3. **~~Escalate on verification/confidence, not on category.~~ → REFUTED. Escalate on category;
+   answer locally only where a verifier can check something real.**
 
-4. **The local-vs-Fireworks map is data-driven, not assumed.** Which categories default to local
-   must come from **benchmarking the chosen 2–3B model per category**, not intuition. Working
-   hypothesis (to be confirmed): sentiment / NER / factual / summarization answer well locally;
-   math / logic / code-gen lean on Fireworks. Confirm with `benchmark/dataset.py` before wiring
-   defaults.
+   > **This decision was wrong, and it is what failed the 80% accuracy gate** (submission status
+   > `ACCURACY_GATE_FAILED`). The original plan was "try every category locally, verify, escalate
+   > on failure." The flaw: **without ground truth, a 'verifier' can only check shape, and shape
+   > cannot see wrongness.** Measured on the participant guide's own practice tasks (2 vCPU / 4 GB,
+   > Qwen2.5-3B Q4), the local model scored **4/8** and every miss sailed through its verifier:
+   >
+   > | Task | Local answer | Verifier said | Truth |
+   > |---|---|---|---|
+   > | factual | "Canberra; near the **Australian Alps**" | ✅ non-empty | ❌ asked for a *body of water* |
+   > | math | invented a step, answered **108** | ✅ "has a number" | ❌ 144 |
+   > | sentiment | bare **"Negative"** | ✅ "has a label" | ❌ mixed review, no justification |
+   > | NER | *(timed out at 45 s)* | — | ❌ empty answer shipped |
+   >
+   > A well-formed wrong answer is *indistinguishable* from a well-formed right one at zero cost.
+   > Pretending otherwise converted the local model's ~50% accuracy directly into the submission's
+   > accuracy.
+
+   The corrected rule: **a category is answered locally only if we can verify something true about
+   the answer.** Two checks qualify, and only two:
+   - **code generation / debugging** → extract the code and *actually execute it* in a subprocess.
+     Code that doesn't parse, throws on import, or never terminates is objectively broken. ✅ local
+   - **summarization** → the prompt *states* the constraint ("in exactly one sentence", "in 50
+     words"), so we can check the answer against it, and against the source (a summary must
+     compress, and must not be a verbatim copy). ✅ local
+   - **factual / math / sentiment / NER / logic** → no sound ground-truth-free check exists.
+     **Not answered locally at all.** ❌ Fireworks
+
+   Escalating a good answer wastes tokens; keeping a wrong one loses the gate — and the gate is
+   binary. The asymmetry is not close, so we don't gamble on the unverifiable categories.
+
+4. **The local-vs-Fireworks map is data-driven, not assumed.** ✅ **Resolved** — see the table in
+   "Measured results" below. Note that the *first* benchmark (36/40 on our own synthetic tasks,
+   with our own keyword/numeric checkers) badly overstated local accuracy: lenient checkers on
+   self-written tasks are not a proxy for an LLM judge on unseen ones. The practice tasks published
+   in the guide were the first honest signal.
 
 ## Flow
 
+The two phases **overlap**: the Fireworks calls are IO-bound and the local phase is CPU-bound
+(llama.cpp releases the GIL while decoding), so the local phase costs almost no extra wall clock.
+
 ```mermaid
 flowchart TD
-    A[/input/tasks.json/] --> B[For each task]
-    B --> C{Classify category<br/>heuristic or local model<br/>0 tokens}
-    C --> D[Local 2-3B model<br/>attempts answer<br/>0 Fireworks tokens]
-    D --> E{Category-specific<br/>local verifier}
+    A[/input/tasks.json/] --> B[Classify category<br/>regex heuristic, 0 tokens]
+    B --> C{Category has a<br/>real verifier?}
 
-    E -->|math| F1[Recompute /<br/>numeric sanity check]
-    E -->|code| F2[Execute vs asserts]
-    E -->|sentiment / NER| F3[Validate format<br/>& label set]
-    E -->|factual / summary / logic| F4[Confidence /<br/>self-consistency]
+    C -->|"factual · math · sentiment<br/>NER · logic"| D[Fireworks API<br/>via FIREWORKS_BASE_URL<br/>tokens spent here only]
+
+    C -->|"code_gen · code_debug<br/>summarization"| E[Local 3B model<br/>0 Fireworks tokens]
+    E --> F{Verify}
+    F -->|code| F1[Execute in a subprocess:<br/>parses? runs? terminates?]
+    F -->|summary| F2[Obeys the stated length<br/>constraint? compresses?<br/>not a copy?]
 
     F1 --> G{Pass?}
     F2 --> G
-    F3 --> G
-    F4 --> G
+    G -->|Yes| H[Keep local answer<br/>0 tokens]
+    G -->|No / truncated / budget spent| D
 
-    G -->|Yes / high confidence| H[Use local answer<br/>0 Fireworks tokens]
-    G -->|No / low confidence| I[Escalate to Fireworks API<br/>via FIREWORKS_BASE_URL<br/>tokens spent here only]
-
-    H --> J[Collect result]
-    I --> J
-    J --> K{More tasks?}
-    K -->|Yes| B
-    K -->|No| L[/output/results.json/]
+    D --> I{Got an answer?}
+    I -->|Yes| J[Collect result]
+    I -->|No — API down| K[Fall back to the local draft,<br/>never to an empty string]
+    H --> J
+    K --> J
+    J --> L[/output/results.json/]
     L --> M[Exit 0]
 ```
 
-## What this changes vs. the current implementation
+## Measured results
 
-- Current `agent/` is **Fireworks-only** with a heuristic (regex) router. This architecture keeps
-  the heuristic classifier as a cheap first pass (or replaces it with zero-shot local
-  classification) but adds a **local answering model + per-category verifiers + escalation** in
-  front of the Fireworks call.
-- The regex router is **not** the accuracy bottleneck and is **not** being replaced by a trained
-  model — a misroute only mis-selects a template/cap/verifier, not the answer. The real leverage
-  is moving tasks off Fireworks entirely.
+Guide's 8 practice tasks, in-container, `--cpus=2 --memory=4g` (the grading box's shape):
+
+| Configuration | Accuracy | Fireworks tokens | Runtime |
+|---|---|---|---|
+| Local-first everywhere (the version that failed the gate) | **4/8 (50%)** | — | 300 s (budget-capped) |
+| All-Fireworks | 8/8 | 1,881 | 3 s |
+| **Verified subset (current)** | **8/8 (100%)** | **1,049 (−44%)** | 95 s |
+
+The verified subset answers summarization + both code tasks locally at **zero tokens**, all three
+passing verification, and routes the other five to Fireworks.
+
+## Never ship an empty answer
+
+`_FALLBACK_ANSWER = ""` used to be the response to any failure. An empty answer is graded **wrong
+with certainty**; an unverified local draft is merely *likely* wrong — strictly better. So the
+precedence is now: Fireworks answer → the local draft we already generated (free) → one unverified
+local generation → only then `""`. In the failed run, an NER task timed out locally and shipped an
+empty string; that path no longer exists.
+
+## What this changes vs. the pre-mortem implementation
+
+- The regex router is **not** the accuracy bottleneck — a misroute mis-selects a template and a
+  cap, not the answer. It now also selects *which backend*, so a misroute into a local-eligible
+  category is the one costly case; the verifiers catch it (a "summary" of a math question won't
+  respect a constraint that isn't there... but it will be *kept*, so keep the router's
+  local-eligible patterns tight).
+- Local inference costs **~31–45 s/task on 2 vCPU**, so the local budget only ever covers a handful
+  of tasks. This is fine now that local handles a *subset* by design, but it means "answer
+  everything locally" was never reachable on this hardware anyway.
 
 ## Constraints this must respect
 
@@ -98,8 +142,10 @@ flowchart TD
 - Read `FIREWORKS_API_KEY` / `FIREWORKS_BASE_URL` / `ALLOWED_MODELS` from env only; route all
   Fireworks calls through `FIREWORKS_BASE_URL`; only call models in `ALLOWED_MODELS`.
 
-## Open question (blocks the local-vs-Fireworks map)
+## The lesson, stated plainly
 
-How well does a specific 2–3B model answer each of the 8 categories? Benchmark it (no submission
-slot needed) to replace "lightweight = local" with a real per-category pass/fail map before wiring
-defaults.
+**Token efficiency is a ranking; accuracy is a gate.** Optimising the ranking at the expense of the
+gate scores zero, and that is precisely the trade the original local-first design made — it spent
+300 s of CPU to *lower* the submission's accuracy. Local inference is only free if the answer is
+right, so the local model may only be trusted where being wrong is *detectable*. Everywhere else,
+paying tokens is the cheap option.

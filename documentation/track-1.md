@@ -38,6 +38,35 @@ These are the exact model IDs. Still read them from the env var at runtime — d
 - Your registry's **download/pull counter** (GitHub Packages, Docker Hub) indicates whether the graders have pulled your image yet — useful while the backlog clears.
 - General (all tracks): container ready < 60 s, < 30 s per request, English only, exit 0 on success.
 
+## Troubleshooting: what each failure status means
+
+From the updated participant guide. These are *distinct* failures — knowing which one you got tells you exactly where to look.
+
+| Status | What it means | Fix |
+|---|---|---|
+| `PULL_ERROR` | Image couldn't be pulled | Make it public; include a `linux/amd64` manifest |
+| `RUNTIME_ERROR` | Container exited **non-zero** | Something crashed — check container logs locally |
+| `TIMEOUT` | Didn't finish in 10 min | Hangs, infinite loops, excessive retries |
+| `OUTPUT_MISSING` | Exited 0 but never wrote `/output/results.json` | Write the file before exiting |
+| `INVALID_RESULTS_SCHEMA` | Wrong shape | Every entry needs both `task_id` **and** `answer` |
+| `MODEL_VIOLATION` | Called a model not in `ALLOWED_MODELS` | Read the list from env at runtime |
+| `IMAGE_TOO_LARGE` | Over 10 GB compressed | Trim layers |
+| `ACCURACY_GATE_FAILED` | **Ran fine; the answers were just wrong** | Quality issue, not infrastructure |
+
+`flagged: ZERO_API_CALLS` alongside a result is **not a failure** — it's the valid local-only strategy.
+
+> **We hit `ACCURACY_GATE_FAILED` once (2026-07-11).** It's worth internalising what that status rules *out*: the image pulled, the container exited 0, the JSON schema was valid, the models were legal, and it finished in time. Every piece of plumbing was correct. The answers were simply wrong — which pointed straight at the local model, not at the routing, the output format, or the API client. See [architecture-1.md](architecture-1.md) for the post-mortem.
+
+## Practice tasks (not the real grading set)
+
+The guide publishes 8 illustrative tasks — roughly one per capability category — explicitly so you can validate input/output handling **without burning a submission slot**. They aren't the real tasks, but they're the closest public proxy for their phrasing and difficulty, and they're far more honest than a self-written benchmark: our own 40-task harness scored the local model at 90%, while these scored it at **50%**. Trust these over anything we write ourselves.
+
+They live in `agent/examples/practice_tasks.json`. Note the traps they contain, which the agent originally fell into:
+
+- **practice-01** is a *two-part* question ("the capital … **and what body of water is it near?**"). Answering only the first half is a fail.
+- **practice-02** composes a percentage with an absolute ("sells 15% on Monday and 60 more on Tuesday") — a small model mis-composes it.
+- **practice-03** is a genuinely **mixed** review, so "Negative" alone is wrong; and the category requires a *justification*, not just a label.
+
 ---
 
 # Part 1 — Understanding the Challenge

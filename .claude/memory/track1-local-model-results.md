@@ -1,17 +1,19 @@
 ---
 name: track1-local-model-results
-description: Track 1 local-model benchmark — Qwen2.5-3B-Instruct Q4 scores 36/40 (90%) on CPU, nearly clearing the gate at zero Fireworks tokens; plus the dev-setup gotchas
+description: Track 1 local-model benchmark — our own harness scored Qwen2.5-3B at 90%, but the guide's practice tasks scored it at 50%; the 90% was an artifact of lenient self-written checkers
 metadata:
   type: project
 ---
 
-Answered the blocking open question in [[track1-hybrid-architecture]]: benchmarked a bundled local model per category (2026-07-09). Chosen local model: **Qwen2.5-3B-Instruct Q4_K_M GGUF** (bartowski repo, ~1.8 GB) via **llama-cpp-python**. Ran the existing 40-task harness with `scripts/benchmark.py --local` (new mode) inside the Docker image.
+> ⚠️ **The headline number in this memory was wrong and it cost us a submission.** The 36/40 (90%) below was measured with **our own keyword/numeric checkers on our own 40 synthetic tasks**. On the participant guide's **published practice tasks**, the same model scored **4/8 (50%)** — and trusting the 90% is what produced `ACCURACY_GATE_FAILED`. See [[track1-accuracy-gate-postmortem]]. **Lesson: never benchmark a model against checkers you wrote for tasks you wrote.** A lenient checker measures your checker, not the model. The real gate is an LLM judge on unseen prompts.
 
-**Result: 36/40 = 90%, passes 8/8 categories (≥80% each).** Per-category (correct/5, avg tokens): math 5/5, logic 5/5, code_debug 5/5, code_gen 5/5 (all 100%); factual 4/5 (67 tok), sentiment 4/5, summarization 4/5, ner 4/5 (all 80%). The 4 misses were an ambiguous mixed-sentiment review (sent3), NER completeness (ner1), a factual-recency item (fact4 "most moons" — Saturn vs Jupiter), and long-text summarization keyword coverage (sum4) — i.e. hard/ambiguous instances, not category-wide weakness.
+Benchmarked a bundled local model per category (2026-07-09). Chosen local model: **Qwen2.5-3B-Instruct Q4_K_M GGUF** (bartowski repo, ~1.8 GB) via **llama-cpp-python**. Ran the existing 40-task harness with `scripts/benchmark.py --local` inside the Docker image.
 
-**This REFUTES the architecture doc's pre-data hypothesis** (it guessed math/logic/code-gen would "lean Fireworks"). In reality those are the local model's STRONGEST categories (100%); the weaker ones are factual/sentiment/summarization/ner. **Implication:** a 3B local model alone nearly clears the 16/19 (84.2%) gate at **zero Fireworks tokens** — the best possible ranking outcome. **Caveat:** our checkers are deterministic keyword/numeric/code checks on OUR 40 tasks; the real gate is an LLM judge on 19 UNSEEN tasks, so 90%-here ≠ guaranteed pass. Margin over the gate is ~1 task — thin given judge non-determinism.
+**Result (self-scored, ~unreliable): 36/40 = 90%.** Per-category (correct/5): math 5/5, logic 5/5, code_debug 5/5, code_gen 5/5; factual 4/5, sentiment 4/5, summarization 4/5, ner 4/5.
 
-**Verifier caveat for wiring escalation:** in production we have NO ground-truth (unseen prompts), so local verifiers can only check FORMAT/SANITY (empty answer, malformed label set, non-parseable code, no number in a math answer) + confidence — they can't catch a confidently-wrong-but-well-formed answer. So escalation mainly rescues generation failures, not subtle wrongness; the local model's raw accuracy carries most of the load.
+**What actually held up.** Of the four "100%" categories, only **code_debug and code_gen** survived contact with the practice tasks — and those, plus **summarization**, are now the only categories answered locally (they're also the only ones with a verifier that checks something real: code is *executed*; a summary is checked against the stated length constraint). The self-benchmark's "100%" on **math and logic was an illusion** — on the practice math task the model invented a step and answered 108 (truth: 144), which the numeric checker happily accepted.
+
+**Verifier caveat (this is the load-bearing one):** in production there is NO ground truth (unseen prompts), so a verifier can only check FORMAT/SANITY. It **cannot catch a confidently-wrong-but-well-formed answer** — and that is the local model's dominant failure mode, not generation failure. Do not build escalation logic that assumes otherwise; instead, only answer locally where wrongness is *detectable*.
 
 **Latency:** 0.1–13.3 s/task at LOCAL_N_THREADS=8 on a 13600KF. MUST re-verify < 30 s/request and ≤ 10 min total on the real 2-vCPU grading box (slower) before trusting local-only.
 

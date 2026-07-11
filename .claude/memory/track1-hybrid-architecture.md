@@ -1,9 +1,11 @@
 ---
 name: track1-hybrid-architecture
-description: Track 1 target architecture — local-first hybrid (local 2-3B answers + verify + escalate to Fireworks), documented in documentation/architecture-1.md
+description: Track 1 architecture — local answers ONLY for verifiable categories (code, summarization), everything else Fireworks; documented in documentation/architecture-1.md
 metadata:
   type: project
 ---
+
+> ⚠️ **Decision #3 below is REFUTED — it is what failed the accuracy gate.** "Try every category locally, verify, escalate on failure" does not work, because a ground-truth-free verifier can only check *shape*, and shape cannot see wrongness. The corrected rule is: **only answer locally where a verifier can check something TRUE** — `code_gen`/`code_debug` (execute the code) and `summarization` (check the prompt's stated length constraint). Everything else goes straight to Fireworks. See [[track1-accuracy-gate-postmortem]] for the full diagnosis and the measured fix (4/8 → 8/8, −44% tokens).
 
 Target architecture for the Track 1 agent, decided 2026-07-09 and written up in `documentation/architecture-1.md` (with a mermaid flow diagram). Supersedes the pure Fireworks-only routing design in [[track1-project]]. Driven by the published facts in [[track1-launch-day-facts]] (80% gate = ≥16/19; local answers cost zero Fireworks tokens).
 
