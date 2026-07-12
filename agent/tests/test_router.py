@@ -97,3 +97,143 @@ def test_selector_prefers_non_reasoning_for_small():
     sel = ModelSelector(allowed)
     # Same size; the non-reasoning model is cheaper, so pick it for small.
     assert sel.small() == "accounts/fireworks/models/qwen2p5-7b-instruct"
+
+
+# --- prose must not be mistaken for code -------------------------------------
+#
+# `code_debug` / `code_gen` are in categories.LOCAL_OK, so a misroute here is
+# expensive twice over: the task goes to the bundled local model, burns 30-45s of
+# the 150s local budget, fails the execute-the-code verifier (prose is not code),
+# and then escalates to Fireworks still wearing the debugger prompt. None of the
+# published sample tasks trip this, which is exactly why it needs a test — the
+# evaluation prompts are unseen variants.
+
+
+@pytest.mark.parametrize(
+    "prompt,expected",
+    [
+        (
+            "Summarize the following passage in two sentences:\n\n"
+            "'Many firms now expect a return to the office. Public health rules "
+            "and private sector norms let each employer set its own policy, and "
+            "a new class of hybrid roles has emerged as a constant compromise.'",
+            Category.SUMMARIZATION,
+        ),
+        (
+            "Classify the sentiment of this review: 'I let it charge overnight "
+            "and the return process was painless, though the class of materials "
+            "feels cheap.'",
+            Category.SENTIMENT,
+        ),
+        (
+            "What is the difference between a public company and a private company?",
+            Category.FACTUAL,
+        ),
+        (
+            "Extract all named entities from the following text and label each as "
+            "PERSON, ORGANIZATION, LOCATION, or DATE:\n\n'Public Health England "
+            "let its contract with Acme Var Ltd return to open tender in Leeds.'",
+            Category.NER,
+        ),
+    ],
+    ids=["summary", "sentiment", "factual", "ner"],
+)
+def test_prose_is_not_mistaken_for_code(prompt, expected):
+    assert classify(prompt) == expected
+
+
+def test_real_code_is_still_detected_without_a_fence():
+    prompt = (
+        "The snippet below is broken, please fix it:\n\n"
+        "def total(items):\n"
+        "    total = 0\n"
+        "    for i in items:\n"
+        "        total += i\n"
+        "    return total_\n"
+    )
+    assert classify(prompt) == Category.CODE_DEBUG
+
+
+def test_codegen_outranks_ner_when_asking_for_a_function():
+    prompt = "Write a Python function that extracts all named entities from a string."
+    assert classify(prompt) == Category.CODE_GEN
+
+
+# --- the published Track 1 sample tasks ---------------------------------------
+# The shapes the judge actually grades. A routing regression here is a scoring
+# regression, so they are pinned.
+
+
+@pytest.mark.parametrize(
+    "prompt,expected",
+    [
+        (
+            "Name the three primary colors in the RGB color model and briefly "
+            "explain why displays use RGB instead of RYB.",
+            Category.FACTUAL,
+        ),
+        (
+            "What is the difference between machine learning and deep learning? "
+            "Briefly explain how each works.",
+            Category.FACTUAL,
+        ),
+        (
+            "Explain the difference between RAM and ROM in a computer. What is "
+            "each type used for?",
+            Category.FACTUAL,
+        ),
+        (
+            "A warehouse starts with 2,400 units. In Q1 it sells 37% of stock. In "
+            "Q2 it restocks 800 units. In Q3 it sells 640 units. How many units "
+            "remain at the end of Q3?",
+            Category.MATH,
+        ),
+        (
+            "A recipe requires 3/4 cup of sugar for 12 cookies. How much sugar is "
+            "needed for 30 cookies? If sugar costs $2.40 per cup, what is the "
+            "total cost of sugar for 30 cookies?",
+            Category.MATH,
+        ),
+        (
+            "Classify the sentiment of this customer review as Positive, Negative, "
+            "or Neutral and give a one-sentence reason: 'The product arrived two "
+            "days late and the packaging was damaged, but the item worked "
+            "perfectly and customer support resolved my complaint within an hour.'",
+            Category.SENTIMENT,
+        ),
+        (
+            "Classify the sentiment of this tweet as Positive, Negative, or "
+            "Neutral and give a one-sentence reason: 'Just got my order. Box was "
+            "dented and the manual was missing, but honestly the device itself is "
+            "flawless and set up in under 5 minutes.'",
+            Category.SENTIMENT,
+        ),
+        (
+            "Summarize the following passage in exactly two sentences:\n\n"
+            "'Machine learning is increasingly deployed in healthcare for "
+            "diagnosis, treatment planning, and patient monitoring. However, "
+            "concerns remain about model interpretability, data privacy, and "
+            "liability when errors occur.'",
+            Category.SUMMARIZATION,
+        ),
+        (
+            "Summarize the following passage in exactly three bullet points, each "
+            "no longer than 15 words:\n\n'Remote work has transformed how "
+            "companies operate globally. Employees gain flexibility and reduced "
+            "commute times. However, challenges persist around collaboration and "
+            "company culture.'",
+            Category.SUMMARIZATION,
+        ),
+        (
+            "Extract all named entities from the following text and label each as "
+            "PERSON, ORGANIZATION, LOCATION, or DATE:\n\n'On March 15 2023, Sundar "
+            "Pichai announced that Google would open a new AI research lab in "
+            "Zurich, partnering with ETH Zurich to focus on large language model "
+            "safety.'",
+            Category.NER,
+        ),
+    ],
+    ids="T01 T01b T01c T02 T02b T03 T03b T04 T04b T05".split(),
+)
+def test_classify_published_sample_tasks(prompt, expected):
+    assert classify(prompt) == expected
